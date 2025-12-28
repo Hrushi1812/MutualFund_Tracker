@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from services.holdings_service import holdings_service
+from services.holdings_service import holdings_service, validate_excel_against_scheme
 from services.nav_service import nav_service
 from services.cas_service import cas_service
 from services.auth_service import AuthService
@@ -24,10 +24,12 @@ def remove_fund(fund_id: str, current_user: dict = Depends(get_current_user)):
 async def upload(
     fund_name: str = Form(..., min_length=1),
     scheme_code: str = Form(None),
+    scheme_name: str = Form(None),  # Official scheme name for validation
     file: UploadFile = File(...),
     invested_amount: str = Form(None), # Optional for SIP (derived) or Lumpsum
     invested_date: str = Form(...), # DD-MM-YYYY (Start Date for SIP)
     nickname: str = Form(None),
+    skip_validation: str = Form("false"),  # Allow bypassing Excel validation
     # SIP Fields
     investment_type: str = Form("lumpsum"), # lumpsum, sip
     sip_amount: str = Form(None),
@@ -46,10 +48,26 @@ async def upload(
     current_user: dict = Depends(get_current_user)
 ):
     user_id = str(current_user["_id"])
+    skip_validation_bool = skip_validation.lower() == "true"
     
     # 1. Validate File Type
     if not file.filename.lower().endswith(('.xls', '.xlsx')):
         raise HTTPException(400, "Invalid file format. Please upload an Excel file (.xls, .xlsx).")
+
+    # 1.5 Validate Excel matches selected scheme (if scheme_name provided)
+    validation_result = None
+    if scheme_name and not skip_validation_bool:
+        validation_result = validate_excel_against_scheme(file, scheme_name)
+        
+        # If validation failed and user hasn't acknowledged, return for confirmation
+        if validation_result and not validation_result.get("is_valid", True):
+            return {
+                "validation_required": True,
+                "validation_warning": validation_result.get("warning"),
+                "extracted_fund_name": validation_result.get("extracted_name"),
+                "expected_scheme_name": scheme_name,
+                "similarity_score": validation_result.get("similarity_score", 0)
+            }
 
     # 2. Validate Amount
     amount_float = 0.0

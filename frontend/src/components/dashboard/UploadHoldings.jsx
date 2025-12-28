@@ -35,24 +35,26 @@ const UploadHoldings = () => {
                     <button
                         type="button"
                         onClick={() => setActiveTab('lumpsum')}
-                        className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'lumpsum'
+                        className={`flex-1 px-3 sm:px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab === 'lumpsum'
                             ? 'bg-primary text-white shadow-lg shadow-primary/25'
                             : 'text-zinc-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <TrendingUp className="w-4 h-4" />
-                        Lumpsum Investment
+                        <span className="hidden sm:inline">Lumpsum Investment</span>
+                        <span className="sm:hidden">Lumpsum</span>
                     </button>
                     <button
                         type="button"
                         onClick={() => setActiveTab('sip')}
-                        className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'sip'
+                        className={`flex-1 px-3 sm:px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab === 'sip'
                             ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg shadow-purple-500/25'
                             : 'text-zinc-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <RefreshCw className="w-4 h-4" />
-                        SIP (Systematic)
+                        <span className="hidden sm:inline">SIP (Systematic)</span>
+                        <span className="sm:hidden">SIP</span>
                     </button>
                 </div>
             </div>
