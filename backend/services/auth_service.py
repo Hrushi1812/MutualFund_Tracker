@@ -58,9 +58,15 @@ class AuthService:
         # Validate Password
         AuthService.validate_password_strength(user.password)
 
+        # Check username uniqueness
         if AuthService.get_user(user.username):
             logger.warning(f"Registration failed: Username '{user.username}' already exists.")
-            raise HTTPException(status_code=400, detail="Username already registered")
+            raise HTTPException(status_code=400, detail="Username already exists")
+        
+        # Check email uniqueness
+        if AuthService.get_user_by_email(user.email):
+            logger.warning(f"Registration failed: Email '{user.email}' already exists.")
+            raise HTTPException(status_code=400, detail="Email already exists")
         
         from models.db_schemas import UserDocument
         

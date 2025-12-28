@@ -10,12 +10,14 @@ const RegisterPage = () => {
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({ username: '', email: '', password: '' });
     const [error, setError] = useState('');
+    const [errorField, setErrorField] = useState(''); // 'username' | 'email' | ''
     const [showPassword, setShowPassword] = useState(false);
 
     const handleRegister = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
+        setErrorField('');
 
         const result = await register(formData.username, formData.email, formData.password);
 
@@ -24,6 +26,12 @@ const RegisterPage = () => {
             navigate('/login');
         } else {
             setError(result.message);
+            // Set field-specific error for highlighting
+            if (result.message.toLowerCase().includes('username')) {
+                setErrorField('username');
+            } else if (result.message.toLowerCase().includes('email')) {
+                setErrorField('email');
+            }
         }
     };
 
@@ -59,8 +67,8 @@ const RegisterPage = () => {
                                 type="text"
                                 required
                                 value={formData.username}
-                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                className="w-full bg-brand-surface border border-white/5 rounded-lg py-3 pl-10 pr-4 text-brand-text focus:outline-none focus:border-brand-glow/50 focus:ring-1 focus:ring-brand-glow/50 transition-all placeholder:text-gray-600"
+                                onChange={(e) => { setFormData({ ...formData, username: e.target.value }); if (errorField === 'username') { setError(''); setErrorField(''); } }}
+                                className={`w-full bg-brand-surface border rounded-lg py-3 pl-10 pr-4 text-brand-text focus:outline-none transition-all placeholder:text-gray-600 ${errorField === 'username' ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-white/5 focus:border-brand-glow/50 focus:ring-1 focus:ring-brand-glow/50'}`}
                                 placeholder="Choose a username"
                             />
                         </div>
@@ -74,8 +82,8 @@ const RegisterPage = () => {
                                 type="email"
                                 required
                                 value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full bg-brand-surface border border-white/5 rounded-lg py-3 pl-10 pr-4 text-brand-text focus:outline-none focus:border-brand-glow/50 focus:ring-1 focus:ring-brand-glow/50 transition-all placeholder:text-gray-600"
+                                onChange={(e) => { setFormData({ ...formData, email: e.target.value }); if (errorField === 'email') { setError(''); setErrorField(''); } }}
+                                className={`w-full bg-brand-surface border rounded-lg py-3 pl-10 pr-4 text-brand-text focus:outline-none transition-all placeholder:text-gray-600 ${errorField === 'email' ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-white/5 focus:border-brand-glow/50 focus:ring-1 focus:ring-brand-glow/50'}`}
                                 placeholder="your@email.com"
                             />
                         </div>
