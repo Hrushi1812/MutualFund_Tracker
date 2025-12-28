@@ -1,5 +1,5 @@
-import React, { useState, useContext, useRef } from 'react';
-import { Upload, Calendar, FileSpreadsheet, CheckCircle2, AlertCircle, IndianRupee, X, Loader2, RefreshCw, TrendingUp, Zap, Target, FileText, Plus, Trash2, Eye } from 'lucide-react';
+import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
+import { Upload, Calendar, FileSpreadsheet, CheckCircle2, AlertCircle, IndianRupee, X, Loader2, RefreshCw, TrendingUp, Zap, Target, FileText, Plus, Trash2, Eye, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api';
 import { PortfolioContext } from '../../context/PortfolioContext';
@@ -15,6 +15,19 @@ const UploadSIP = () => {
     const [fundName, setFundName] = useState('');
     const [nickname, setNickname] = useState('');
     const fileInputRef = useRef(null);
+
+    // Scheme Search State (for Simple mode)
+    const [schemeSearchQuery, setSchemeSearchQuery] = useState('');
+    const [schemeResults, setSchemeResults] = useState([]);
+    const [selectedSchemeCode, setSelectedSchemeCode] = useState(null);
+    const [selectedSchemeName, setSelectedSchemeName] = useState('');
+    const [showSchemeDropdown, setShowSchemeDropdown] = useState(false);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const schemeDropdownRef = useRef(null);
+
+    // Validation Warning Modal State
+    const [showValidationModal, setShowValidationModal] = useState(false);
+    const [validationWarning, setValidationWarning] = useState(null);
 
     // Simple Mode Fields
     const [sipAmount, setSipAmount] = useState('');
@@ -52,6 +65,62 @@ const UploadSIP = () => {
     const [dragOver, setDragOver] = useState(false);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
+
+    // --- Scheme Search Functions ---
+    const searchSchemes = useCallback(async (query) => {
+        if (!query || query.length < 2) {
+            setSchemeResults([]);
+            return;
+        }
+
+        setSearchLoading(true);
+        try {
+            const response = await api.get(`/schemes/search?q=${encodeURIComponent(query)}`);
+            setSchemeResults(response.data.schemes || []);
+        } catch (error) {
+            console.error('Scheme search error:', error);
+            setSchemeResults([]);
+        } finally {
+            setSearchLoading(false);
+        }
+    }, []);
+
+    // Debounce effect
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (schemeSearchQuery && !selectedSchemeCode) {
+                searchSchemes(schemeSearchQuery);
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [schemeSearchQuery, selectedSchemeCode, searchSchemes]);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (schemeDropdownRef.current && !schemeDropdownRef.current.contains(e.target)) {
+                setShowSchemeDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleSchemeSelect = (scheme) => {
+        setSelectedSchemeCode(scheme.schemeCode);
+        setSelectedSchemeName(scheme.schemeName);
+        setFundName(scheme.schemeName);
+        setSchemeSearchQuery(scheme.schemeName);
+        setShowSchemeDropdown(false);
+        setSchemeResults([]);
+    };
+
+    const clearSchemeSelection = () => {
+        setSelectedSchemeCode(null);
+        setSelectedSchemeName('');
+        setSchemeSearchQuery('');
+        setFundName('');
+    };
 
     // --- Handlers ---
 
@@ -393,13 +462,19 @@ const UploadSIP = () => {
         setCasSchemes([]);
         setParsedTransactions([]);
         setCasCostValue(null);
-        setCasAmfiCode(null);  // Clear AMFI code
+        setCasAmfiCode(null);
         setSelectedCasScheme(null);
         setManualInstallments([{ date: '', amount: '', units: '' }]);
         setPendingFundId(null);
         setCandidates([]);
         setSelectedScheme(null);
         setShowModal(false);
+        // Clear scheme search state
+        setSelectedSchemeCode(null);
+        setSelectedSchemeName('');
+        setSchemeSearchQuery('');
+        setValidationWarning(null);
+        setShowValidationModal(false);
     }
 
     const handleSchemeSelection = async (schemeCode) => {
@@ -473,16 +548,76 @@ const UploadSIP = () => {
             <form onSubmit={handleUpload} className="space-y-6">
                 {/* Fund Name - Only for Simple Mode (Detailed mode uses CAS scheme name) */}
                 {sipMode === 'simple' && (
-                    <div>
-                        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">SIP Fund Name <span className="text-red-500">*</span></label>
-                        <input
-                            type="text"
-                            value={fundName}
-                            onChange={(e) => setFundName(e.target.value)}
-                            placeholder="e.g. ICICI Prudential Large Cap Fund"
-                            autoComplete="off"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-primary transition-colors"
-                        />
+                    <div ref={schemeDropdownRef} className="relative">
+                        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                            Search & Select Fund <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                            <input
+                                type="text"
+                                value={schemeSearchQuery}
+                                onChange={(e) => {
+                                    setSchemeSearchQuery(e.target.value);
+                                    if (selectedSchemeCode) clearSchemeSelection();
+                                    setShowSchemeDropdown(true);
+                                }}
+                                onFocus={() => setShowSchemeDropdown(true)}
+                                placeholder="Type to search... e.g. Nippon Large Cap"
+                                autoComplete="off"
+                                className={`w-full bg-white/5 border rounded-xl pl-10 pr-10 py-3 text-white placeholder-zinc-600 focus:outline-none transition-colors ${selectedSchemeCode
+                                    ? 'border-green-500/50 bg-green-500/5'
+                                    : 'border-white/10 focus:border-blue-500'
+                                    }`}
+                            />
+                            {searchLoading && (
+                                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
+                            )}
+                            {selectedSchemeCode && !searchLoading && (
+                                <button
+                                    type="button"
+                                    onClick={clearSchemeSelection}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Selected Scheme Badge */}
+                        {selectedSchemeCode && (
+                            <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                <div className="flex items-center gap-1">
+                                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                                    <span className="text-sm text-green-400 truncate">Selected: {selectedSchemeName}</span>
+                                </div>
+                                <span className="text-xs text-zinc-500 ml-5 sm:ml-0">({selectedSchemeCode})</span>
+                            </div>
+                        )}
+
+                        {/* Dropdown */}
+                        <AnimatePresence>
+                            {showSchemeDropdown && schemeResults.length > 0 && !selectedSchemeCode && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="absolute z-50 w-full mt-2 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto"
+                                >
+                                    {schemeResults.map((scheme) => (
+                                        <button
+                                            key={scheme.schemeCode}
+                                            type="button"
+                                            onClick={() => handleSchemeSelect(scheme)}
+                                            className="w-full text-left px-4 py-3 hover:bg-white/5 border-b border-white/5 last:border-0 transition-colors"
+                                        >
+                                            <div className="text-sm text-white font-medium">{scheme.schemeName}</div>
+                                            <div className="text-xs text-zinc-500 mt-1">Code: {scheme.schemeCode}</div>
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 )}
 
@@ -507,7 +642,7 @@ const UploadSIP = () => {
                         onDragLeave={() => setDragOver(false)}
                         onDrop={handleFileDrop}
                         className={`
-                            border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer relative group
+                            border-2 border-dashed rounded-xl p-4 sm:p-6 text-center transition-all cursor-pointer relative group
                             ${dragOver ? 'border-primary bg-primary/10' : 'border-white/10 hover:border-zinc-500 hover:bg-white/5'}
                         `}
                     >

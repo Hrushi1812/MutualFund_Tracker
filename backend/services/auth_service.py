@@ -58,9 +58,15 @@ class AuthService:
         # Validate Password
         AuthService.validate_password_strength(user.password)
 
+        # Check username uniqueness
         if AuthService.get_user(user.username):
             logger.warning(f"Registration failed: Username '{user.username}' already exists.")
-            raise HTTPException(status_code=400, detail="Username already registered")
+            raise HTTPException(status_code=400, detail="Username already exists")
+        
+        # Check email uniqueness
+        if AuthService.get_user_by_email(user.email):
+            logger.warning(f"Registration failed: Email '{user.email}' already exists.")
+            raise HTTPException(status_code=400, detail="Email already exists")
         
         from models.db_schemas import UserDocument
         
@@ -90,4 +96,56 @@ class AuthService:
         logger.info(f"User logged in: {username}")
         return user
 
+    @staticmethod
+    def get_user_by_email(email: str):
+        """Look up user by email address."""
+        return users_collection.find_one({"email": email})
+
+    @staticmethod
+    def create_password_reset_token(email: str) -> str:
+        """Generate a JWT token for password reset with 15-min expiry."""
+        expire = datetime.utcnow() + timedelta(minutes=15)
+        to_encode = {
+            "sub": email,
+            "purpose": "password_reset",
+            "exp": expire
+        }
+        encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+        return encoded_jwt
+
+    @staticmethod
+    def reset_password(token: str, new_password: str) -> bool:
+        """Validate reset token and update user password."""
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            email = payload.get("sub")
+            purpose = payload.get("purpose")
+            
+            if purpose != "password_reset" or not email:
+                logger.warning("Password reset failed: Invalid token purpose or missing email.")
+                raise HTTPException(status_code=400, detail="Invalid reset token")
+            
+            user = AuthService.get_user_by_email(email)
+            if not user:
+                logger.warning(f"Password reset failed: User with email '{email}' not found.")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Validate new password strength
+            AuthService.validate_password_strength(new_password)
+            
+            # Update password in database
+            hashed_password = AuthService.get_password_hash(new_password)
+            users_collection.update_one(
+                {"email": email},
+                {"$set": {"hashed_password": hashed_password}}
+            )
+            
+            logger.info(f"Password reset successful for user: {user['username']}")
+            return True
+            
+        except JWTError:
+            logger.warning("Password reset failed: Token expired or invalid.")
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
 auth_service = AuthService()
+

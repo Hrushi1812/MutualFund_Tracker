@@ -75,8 +75,53 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
     };
 
+    const forgotPassword = async (email) => {
+        try {
+            const response = await api.post('/forgot-password', { email });
+            return { success: true, message: response.data.message };
+        } catch (error) {
+            console.error("Forgot password request failed", error);
+            return {
+                success: false,
+                message: error.response?.data?.detail || "Failed to process request"
+            };
+        }
+    };
+
+    const resetPassword = async (token, newPassword) => {
+        try {
+            const response = await api.post('/reset-password', {
+                token,
+                new_password: newPassword
+            });
+            return { success: true, message: response.data.message };
+        } catch (error) {
+            console.error("Password reset failed", error);
+            let errorMessage = "Password reset failed";
+            if (error.response?.data?.detail) {
+                const detail = error.response.data.detail;
+                if (typeof detail === 'string') {
+                    errorMessage = detail;
+                } else if (Array.isArray(detail)) {
+                    errorMessage = detail.map(err => err.msg).join(', ');
+                }
+            }
+            return { success: false, message: errorMessage };
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, login, register, logout }}>
+        <AuthContext.Provider value={{
+            user,
+            token,
+            isAuthenticated,
+            isLoading,
+            login,
+            register,
+            logout,
+            forgotPassword,
+            resetPassword
+        }}>
             {children}
         </AuthContext.Provider>
     );

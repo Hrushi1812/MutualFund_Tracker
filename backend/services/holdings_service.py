@@ -161,6 +161,117 @@ def get_scheme_candidates(query):
     return []
 
 
+def validate_excel_against_scheme(excel_file, scheme_name: str, threshold: float = 0.4) -> dict:
+    """
+    Validates that the uploaded Excel file matches the selected scheme.
+    
+    Extracts fund/scheme name from the first rows of the Excel file and 
+    compares it against the official scheme_name using fuzzy matching.
+    
+    Args:
+        excel_file: The uploaded Excel file object
+        scheme_name: The official scheme name from MFAPI
+        threshold: Minimum similarity score (0-1) to consider a match
+    
+    Returns:
+        dict with keys:
+            - is_valid: bool
+            - extracted_name: str (what was found in Excel, if any)
+            - similarity_score: float
+            - warning: str (if mismatch detected)
+    """
+    if not scheme_name:
+        return {"is_valid": True, "extracted_name": None, "similarity_score": 1.0, "warning": None}
+    
+    try:
+        # Read first 20 rows to find scheme name (before data header)
+        excel_file.file.seek(0)
+        df_header = pd.read_excel(excel_file.file, header=None, nrows=20)
+        excel_file.file.seek(0)  # Reset for subsequent reads
+        
+        # Common fund house keywords to help identify scheme name rows
+        fund_houses = ["HDFC", "SBI", "ICICI", "AXIS", "NIPPON", "KOTAK", "TATA", "ADITYA BIRLA", 
+                      "UTI", "DSP", "FRANKLIN", "MIRAE", "MOTILAL", "PARAG PARIKH", "QUANT",
+                      "INVESCO", "BANDHAN", "EDELWEISS", "CANARA", "SUNDARAM", "L&T", "IDFC"]
+        
+        # Keywords that indicate scheme name cells
+        scheme_keywords = ["FUND", "SCHEME", "DIRECT", "GROWTH", "REGULAR", "PLAN", "IDCW"]
+        
+        extracted_candidates = []
+        
+        # Scan all cells in the first 20 rows
+        for idx, row in df_header.iterrows():
+            for cell in row:
+                if pd.isna(cell):
+                    continue
+                    
+                cell_str = str(cell).strip()
+                
+                # Skip very short or very long strings
+                if len(cell_str) < 10 or len(cell_str) > 200:
+                    continue
+                
+                cell_upper = cell_str.upper()
+                
+                # Check if this cell might contain a scheme name
+                has_fund_house = any(fh in cell_upper for fh in fund_houses)
+                has_scheme_keyword = any(kw in cell_upper for kw in scheme_keywords)
+                
+                if has_fund_house or has_scheme_keyword:
+                    # Score based on similarity to the expected scheme name
+                    ratio = difflib.SequenceMatcher(None, scheme_name.lower(), cell_str.lower()).ratio()
+                    extracted_candidates.append({
+                        "text": cell_str,
+                        "score": ratio,
+                        "row": idx
+                    })
+        
+        # Sort by score descending
+        extracted_candidates.sort(key=lambda x: x["score"], reverse=True)
+        
+        if not extracted_candidates:
+            # No scheme name found in Excel - might be an unusual format
+            # Allow upload but with a note
+            return {
+                "is_valid": True,
+                "extracted_name": None,
+                "similarity_score": 0.0,
+                "warning": "Could not extract fund name from Excel. Please verify the file is correct."
+            }
+        
+        # Take the best match
+        best_match = extracted_candidates[0]
+        extracted_name = best_match["text"]
+        similarity_score = best_match["score"]
+        
+        # Check if it matches
+        if similarity_score >= threshold:
+            return {
+                "is_valid": True,
+                "extracted_name": extracted_name,
+                "similarity_score": similarity_score,
+                "warning": None
+            }
+        else:
+            # Low match - potential mismatch
+            return {
+                "is_valid": False,
+                "extracted_name": extracted_name,
+                "similarity_score": similarity_score,
+                "warning": f"Excel appears to be for '{extracted_name}' but you selected '{scheme_name}'. Please verify or upload the correct file."
+            }
+            
+    except Exception as e:
+        logger.warning(f"Excel validation error: {e}")
+        # Don't block upload on validation errors - just warn
+        return {
+            "is_valid": True,
+            "extracted_name": None,
+            "similarity_score": 0.0,
+            "warning": f"Could not validate Excel: {str(e)}"
+        }
+
+
 # --- Step-Up SIP Logic (State-Based) ---
 
 def months_between(date1, date2):

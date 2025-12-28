@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, holdings, portfolio, fyers
+from routes import auth, holdings, portfolio, fyers, schemes
 from db import client
 from core.logging import setup_logging, get_logger
 from core.config import settings
@@ -44,6 +44,7 @@ app.include_router(auth.router)
 app.include_router(holdings.router)
 app.include_router(portfolio.router)
 app.include_router(fyers.router)
+app.include_router(schemes.router)
 
 @app.get("/")
 def home():
