@@ -387,43 +387,147 @@ class HoldingsService:
         header_idx = None
         
         # Scan first 50 rows only to find the header
-        # We look for a row that contains BOTH "ISIN" and some form of "NAME"/ "DESCRIPTION"
+        # We look for a row that contains ISIN and some form of name/description column
         for idx, row in df_raw.head(50).iterrows():
             row_str = row.astype(str).str.upper().tolist()
             
-            has_isin = any(x.strip() in ["ISIN", "ISIN CODE", "ISIN NO"] for x in row_str if isinstance(x, str))
-            has_name = any(x.strip() in ["SCHEME NAME", "FUND NAME", "DESCRIPTION", "NAME", "SCHEME"] for x in row_str if isinstance(x, str))
+            # ISIN detection - be flexible
+            has_isin = any(
+                "ISIN" in x.strip() 
+                for x in row_str if isinstance(x, str)
+            )
             
-            if has_isin and has_name:
+            # Name detection - many possible headers
+            name_indicators = [
+                "NAME", "INSTRUMENT", "ISSUER", "SECURITY", "COMPANY", 
+                "DESCRIPTION", "SCHEME", "STOCK", "SCRIP", "PARTICULARS"
+            ]
+            has_name = any(
+                any(indicator in x.strip() for indicator in name_indicators)
+                for x in row_str if isinstance(x, str)
+            )
+            
+            # Weight detection - for additional confidence
+            weight_indicators = ["%", "WEIGHT", "AUM", "ALLOCATION", "ASSET"]
+            has_weight = any(
+                any(indicator in x.strip() for indicator in weight_indicators)
+                for x in row_str if isinstance(x, str)
+            )
+            
+            # Best case: has all three
+            if has_isin and has_name and has_weight:
+                header_idx = idx
+                break
+            # Good case: has ISIN and name
+            elif has_isin and has_name:
                 header_idx = idx
                 break
         
         if header_idx is None:
-             # Fallback: Just look for ISIN if we strictly need it
-             for idx, row in df_raw.head(50).iterrows():
-                 row_str = row.astype(str).str.upper().tolist()
-                 if any("ISIN" in x for x in row_str if isinstance(x, str)):
-                     header_idx = idx
-                     break
+            # Fallback: Just look for ISIN + weight (name might be optional)
+            for idx, row in df_raw.head(50).iterrows():
+                row_str = row.astype(str).str.upper().tolist()
+                has_isin = any("ISIN" in x for x in row_str if isinstance(x, str))
+                has_weight = any(
+                    any(ind in x for ind in ["%", "WEIGHT", "AUM"])
+                    for x in row_str if isinstance(x, str)
+                )
+                if has_isin and has_weight:
+                    header_idx = idx
+                    break
         
         if header_idx is None:
-            return {"error": "Could not detect header row. Ensure file has 'ISIN' and 'Scheme Name' columns."}
+            # Last resort: Just look for ISIN
+            for idx, row in df_raw.head(50).iterrows():
+                row_str = row.astype(str).str.upper().tolist()
+                if any("ISIN" in x for x in row_str if isinstance(x, str)):
+                    header_idx = idx
+                    break
+        
+        if header_idx is None:
+            return {"error": "Could not detect header row. Ensure file has 'ISIN' column. Optional: 'Name/Instrument' and 'Weight/% to AUM' columns."}
 
         excel_file.file.seek(0)
         df = pd.read_excel(excel_file.file, header=header_idx)
 
-        # 3. Normalize Columns
+        # 3. Normalize Columns (ROBUST DETECTION)
         col_map = {}
+        isin_found = False
+        name_found = False
+        weight_found = False
+        
         for col in df.columns:
             c = str(col).strip().upper()
-            if "ISIN" in c: col_map[col] = "ISIN"
-            elif "NAME" in c and "INSTRUMENT" in c: col_map[col] = "Name"
-            elif "%" in c and ("NAV" in c or "ASSET" in c): col_map[col] = "Weight"
+            
+            # ISIN Detection (various formats)
+            if not isin_found:
+                if "ISIN" in c or c in ["ISIN", "ISIN CODE", "ISIN NO", "ISIN NUMBER"]:
+                    col_map[col] = "ISIN"
+                    isin_found = True
+                    continue
+            
+            # Name Detection (flexible - many possible column names)
+            if not name_found:
+                name_keywords = ["INSTRUMENT", "ISSUER", "COMPANY", "SECURITY", "STOCK", "SCHEME", "FUND"]
+                # Check if column contains NAME + any keyword, OR just is a name-like column
+                if "NAME" in c:
+                    # Has "NAME" - check if it's combined with a keyword or standalone
+                    if any(kw in c for kw in name_keywords) or c in ["NAME", "SCHEME NAME", "FUND NAME", "SECURITY NAME", "COMPANY NAME"]:
+                        col_map[col] = "Name"
+                        name_found = True
+                        continue
+                # Also check for standalone keywords that likely mean name
+                elif c in ["DESCRIPTION", "SCRIP", "SCRIPT", "PARTICULARS"]:
+                    col_map[col] = "Name"
+                    name_found = True
+                    continue
+                # Handle columns like "Name of the Instrument / Issuer"
+                elif any(kw in c for kw in ["INSTRUMENT", "ISSUER"]) and ("NAME" in c or "OF THE" in c):
+                    col_map[col] = "Name"
+                    name_found = True
+                    continue
+            
+            # Weight/Allocation Detection (very flexible - handles many formats)
+            if not weight_found:
+                # Check for percentage-based columns
+                weight_keywords = ["AUM", "ASSET", "NAV", "WEIGHT", "ALLOCATION", "HOLDING", "PORTFOLIO"]
+                
+                if "%" in c:
+                    # Has % symbol - likely a weight column
+                    for kw in weight_keywords:
+                        if kw in c:
+                            col_map[col] = "Weight"
+                            weight_found = True
+                            break
+                    # Also accept "% TO AUM", "% OF AUM", etc.
+                    if not weight_found and ("TO" in c or "OF" in c):
+                        col_map[col] = "Weight"
+                        weight_found = True
+                    # Last resort - any column with just "%" and looks like weight
+                    if not weight_found and ("WEIGHT" in c or "ALLOC" in c):
+                        col_map[col] = "Weight"
+                        weight_found = True
+                
+                # Handle columns without % symbol but clearly weight-related
+                if not weight_found:
+                    if c in ["WEIGHT", "WEIGHTAGE", "ALLOCATION", "PORTFOLIO WEIGHT", "% TO AUM", "AUM %"]:
+                        col_map[col] = "Weight"
+                        weight_found = True
+                    elif ("WEIGHT" in c or "ALLOC" in c) and "NET" not in c:  # Avoid "Net Asset" columns
+                        col_map[col] = "Weight"
+                        weight_found = True
         
         df = df.rename(columns=col_map)
         
-        if "ISIN" not in df.columns or "Weight" not in df.columns:
-             return {"error": f"Missing columns. Found: {df.columns.tolist()}"}
+        # Better error message showing what we found and what's missing
+        missing = []
+        if "ISIN" not in df.columns:
+            missing.append("ISIN")
+        if "Weight" not in df.columns:
+            missing.append("Weight (% to AUM or similar)")
+        
+        if missing:
+            return {"error": f"Missing required columns: {missing}. Found columns: {[str(c) for c in df.columns.tolist()]}"}
         
         # 4. Clean Data
         count_before_dropna = len(df)
