@@ -1,16 +1,17 @@
 import React, { useContext, useState } from 'react';
-import { Database, RefreshCw, ChevronRight, Trash2, AlertCircle, Zap, Clock, RefreshCcw } from 'lucide-react';
+import { Database, RefreshCw, ChevronRight, Trash2, AlertCircle, Zap, Clock, RefreshCcw, Upload } from 'lucide-react';
 import api from '../../api';
 import { PortfolioContext } from '../../context/PortfolioContext';
 import { FyersContext } from '../../context/FyersContext';
+import UpdateHoldingsModal from './UpdateHoldingsModal';
 
 // Reusable Fund Card Component
-const FundCard = ({ fund, onSelect, onDelete, isSIP = false }) => (
+const FundCard = ({ fund, onSelect, onDelete, onUpdateHoldings, isSIP = false }) => (
     <div
         onClick={() => onSelect && onSelect(fund.id)}
         className={`bg-white/5 border p-4 rounded-xl transition-all cursor-pointer group active:scale-[0.98] relative ${isSIP
-                ? 'border-purple-500/20 hover:border-purple-500/50'
-                : 'border-white/5 hover:border-accent/50'
+            ? 'border-purple-500/20 hover:border-purple-500/50'
+            : 'border-white/5 hover:border-accent/50'
             }`}
     >
         {/* SIP indicator stripe */}
@@ -29,7 +30,7 @@ const FundCard = ({ fund, onSelect, onDelete, isSIP = false }) => (
                         <div className="group/tooltip relative">
                             <AlertCircle className="w-4 h-4 text-amber-500" />
                             <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs bg-zinc-800 text-white rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                                Update Required
+                                Holdings outdated{fund.days_since_update ? ` (${fund.days_since_update}d)` : ''}
                             </span>
                         </div>
                     )}
@@ -52,6 +53,16 @@ const FundCard = ({ fund, onSelect, onDelete, isSIP = false }) => (
                         <span>Click to Analyze</span>
                     )}
                 </p>
+                {/* Stale Holdings Update Button */}
+                {fund.is_stale && (
+                    <button
+                        onClick={(e) => onUpdateHoldings(e, fund.id, fund.fund_name)}
+                        className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-md transition-colors"
+                    >
+                        <Upload className="w-3 h-3" />
+                        Update Holdings
+                    </button>
+                )}
             </div>
             <div className="flex items-center gap-2">
                 <button
@@ -73,6 +84,22 @@ const FundList = ({ onSelect }) => {
     const isLiveData = fyersContext?.isConnected;
     const userOptedOut = fyersContext?.userOptedOut;
     const [connectingFyers, setConnectingFyers] = useState(false);
+
+    // Update Holdings Modal State
+    const [updateModalOpen, setUpdateModalOpen] = useState(false);
+    const [updateFundId, setUpdateFundId] = useState(null);
+    const [updateFundName, setUpdateFundName] = useState('');
+
+    const handleUpdateHoldings = (e, fundId, fundName) => {
+        e.stopPropagation();
+        setUpdateFundId(fundId);
+        setUpdateFundName(fundName);
+        setUpdateModalOpen(true);
+    };
+
+    const handleUpdateSuccess = () => {
+        fetchFunds(); // Refresh the fund list
+    };
 
     const handleDelete = async (e, fundId, fundName) => {
         e.stopPropagation(); // Prevent opening the analyzer
@@ -157,7 +184,7 @@ const FundList = ({ onSelect }) => {
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {funds.filter(f => f.investment_type !== 'sip').map((fund) => (
-                                    <FundCard key={fund.id} fund={fund} onSelect={onSelect} onDelete={handleDelete} />
+                                    <FundCard key={fund.id} fund={fund} onSelect={onSelect} onDelete={handleDelete} onUpdateHoldings={handleUpdateHoldings} />
                                 ))}
                             </div>
                         </div>
@@ -173,13 +200,22 @@ const FundList = ({ onSelect }) => {
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {funds.filter(f => f.investment_type === 'sip').map((fund) => (
-                                    <FundCard key={fund.id} fund={fund} onSelect={onSelect} onDelete={handleDelete} isSIP={true} />
+                                    <FundCard key={fund.id} fund={fund} onSelect={onSelect} onDelete={handleDelete} onUpdateHoldings={handleUpdateHoldings} isSIP={true} />
                                 ))}
                             </div>
                         </div>
                     )}
                 </div>
             )}
+
+            {/* Update Holdings Modal */}
+            <UpdateHoldingsModal
+                isOpen={updateModalOpen}
+                onClose={() => setUpdateModalOpen(false)}
+                fundId={updateFundId}
+                fundName={updateFundName}
+                onSuccess={handleUpdateSuccess}
+            />
         </div>
     );
 };

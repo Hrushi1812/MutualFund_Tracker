@@ -4,7 +4,7 @@ import { Calendar, CheckCircle2, XCircle, Loader2, IndianRupee, AlertTriangle } 
 import api from '../../api';
 
 const SIPActionModal = ({ isOpen, onClose, pendingInstallment, fundId, fundName, onUpdate }) => {
-    const [loading, setLoading] = useState(false);
+    const [loadingAction, setLoadingAction] = useState(null); // 'PAID' | 'SKIPPED' | null
     const [error, setError] = useState('');
     const submittingRef = useRef(false); // Prevents double-submit
 
@@ -15,7 +15,7 @@ const SIPActionModal = ({ isOpen, onClose, pendingInstallment, fundId, fundName,
         if (submittingRef.current) return;
         submittingRef.current = true;
 
-        setLoading(true);
+        setLoadingAction(action);
         setError('');
         try {
             await api.post(`/funds/${fundId}/sip-action`, {
@@ -28,10 +28,11 @@ const SIPActionModal = ({ isOpen, onClose, pendingInstallment, fundId, fundName,
             console.error(err);
             setError('Failed to update status. Please try again.');
         } finally {
-            setLoading(false);
+            setLoadingAction(null);
             submittingRef.current = false; // Reset for potential retry
         }
     };
+
 
     return (
         <AnimatePresence>
@@ -83,26 +84,26 @@ const SIPActionModal = ({ isOpen, onClose, pendingInstallment, fundId, fundName,
                     <div className="grid grid-cols-2 gap-3">
                         <button
                             onClick={() => handleAction('SKIPPED')}
-                            disabled={loading}
+                            disabled={loadingAction !== null}
                             className="py-3 px-4 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 hover:border-red-500/40 transition-all font-medium flex items-center justify-center gap-2"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                            {loadingAction === 'SKIPPED' ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                             Skip
                         </button>
 
                         <button
                             onClick={() => handleAction('PAID')}
-                            disabled={loading}
+                            disabled={loadingAction !== null}
                             className="py-3 px-4 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/20 hover:border-green-500/40 transition-all font-bold flex items-center justify-center gap-2"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            {loadingAction === 'PAID' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                             Invested
                         </button>
                     </div>
 
                     <button
                         onClick={onClose}
-                        disabled={loading}
+                        disabled={loadingAction !== null}
                         className="mt-4 w-full text-xs text-zinc-500 hover:text-white transition-colors"
                     >
                         Decide Later

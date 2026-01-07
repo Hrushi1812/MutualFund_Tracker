@@ -388,30 +388,128 @@ class HoldingsService:
             return []
 
     @staticmethod
+    def sync_sip_installments(fund_id_str, user_id):
+        """
+        Syncs SIP installments by adding new PENDING installments as new months arrive.
+        
+        This should be called before checking for pending installments (e.g., in calculate_pnl).
+        
+        Logic:
+        - Only applies to SIP investments (not lumpsum)
+        - If today >= SIP day of current month, ensure a PENDING installment exists for this month
+        - If no installment exists for current month, add one
+        
+        Returns: True if any changes were made, False otherwise
+        """
+        try:
+            doc = holdings_collection.find_one({"_id": ObjectId(fund_id_str), "user_id": user_id})
+            if not doc:
+                return False
+            
+            investment_type = doc.get("investment_type", "lumpsum")
+            if investment_type != "sip":
+                return False
+            
+            sip_day = doc.get("sip_day")
+            sip_amount = float(doc.get("current_sip_amount") or doc.get("sip_amount", 0) or 0)
+            
+            if not sip_day or sip_amount <= 0:
+                return False
+            
+            # Both simple and detailed modes need sync for new months
+            
+            today = get_current_ist_time().date()
+            installments = doc.get("sip_installments", [])
+            
+            # Check if SIP day of current month has passed
+            try:
+                current_month_sip_date = today.replace(day=sip_day)
+            except ValueError:
+                # Handle months with fewer days (e.g., Feb 29, 30, 31)
+                # Use last day of month
+                next_month = today.replace(day=28) + timedelta(days=4)
+                current_month_sip_date = next_month - timedelta(days=next_month.day)
+            
+            if today < current_month_sip_date:
+                # SIP day hasn't arrived this month yet
+                return False
+            
+            # Check if installment for this month already exists
+            current_month_sip_str = format_date_for_api(current_month_sip_date)
+            
+            for inst in installments:
+                inst_date_str = inst.get("date")
+                try:
+                    inst_date = parse_date_from_str(inst_date_str).date()
+                    # Same month and year? Already have an installment
+                    if inst_date.month == today.month and inst_date.year == today.year:
+                        return False
+                except:
+                    continue
+            
+            # No installment for this month - add a new PENDING one
+            logger.info(f"Syncing SIP: Adding PENDING installment for {current_month_sip_str}")
+            
+            new_installment = {
+                "date": current_month_sip_str,
+                "amount": sip_amount,
+                "units": None,
+                "nav": None,
+                "status": "PENDING",
+                "allocation_status": "PENDING_NAV",
+                "is_estimated": False
+            }
+            
+            holdings_collection.update_one(
+                {"_id": ObjectId(fund_id_str)},
+                {"$push": {"sip_installments": new_installment}}
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error syncing SIP installments: {e}")
+            return False
+
+    @staticmethod
     def _is_portfolio_stale(upload_date: datetime) -> bool:
         """
         Determines if a portfolio is stale based on SEBI's 10-day monthly disclosure rule.
         Rule: On the 11th of Month M, we expect an upload from Month M.
         """
-        if not upload_date: return True
+        info = HoldingsService._get_stale_info(upload_date)
+        return info["is_stale"]
+
+    @staticmethod
+    def _get_stale_info(upload_date: datetime) -> dict:
+        """
+        Returns stale status and days since last update.
+        Rule: On the 11th of Month M, we expect an upload from Month M.
         
-        now = datetime.utcnow() # Using UTC for consistency
+        Returns:
+            dict: {"is_stale": bool, "days_since_update": int}
+        """
+        if not upload_date:
+            return {"is_stale": True, "days_since_update": None}
+        
+        now = datetime.utcnow()
+        days_since = (now - upload_date).days
         cutoff_day = 10
         
         if now.day > cutoff_day:
             # Past the 10th: Must have upload from CURRENT month
-            return not (upload_date.month == now.month and upload_date.year == now.year)
+            is_stale = not (upload_date.month == now.month and upload_date.year == now.year)
         else:
             # Before the 10th: Upload from CURRENT OR PREVIOUS month is fine
-            # Check if upload is from current month
             if upload_date.month == now.month and upload_date.year == now.year:
-                return False
-                
-            # Check if upload is from previous month
-            first_of_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            last_month_end = first_of_this_month - timedelta(days=1)
-            
-            return not (upload_date.month == last_month_end.month and upload_date.year == last_month_end.year)
+                is_stale = False
+            else:
+                # Check if upload is from previous month
+                first_of_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                last_month_end = first_of_this_month - timedelta(days=1)
+                is_stale = not (upload_date.month == last_month_end.month and upload_date.year == last_month_end.year)
+        
+        return {"is_stale": is_stale, "days_since_update": days_since}
 
     @staticmethod
     def list_funds(user_id):
@@ -419,7 +517,7 @@ class HoldingsService:
         funds = []
         for doc in cursor:
             created_at = doc.get("created_at")
-            is_stale = HoldingsService._is_portfolio_stale(created_at)
+            stale_info = HoldingsService._get_stale_info(created_at)
             
             funds.append({
                 "id": str(doc["_id"]),
@@ -428,7 +526,8 @@ class HoldingsService:
                 "invested_date": doc.get("invested_date"),
                 "scheme_code": doc.get("scheme_code"),
                 "nickname": doc.get("nickname"),
-                "is_stale": is_stale,
+                "is_stale": stale_info["is_stale"],
+                "days_since_update": stale_info["days_since_update"],
                 "created_at": format_date_for_api(created_at) if created_at else None,
                 "investment_type": doc.get("investment_type", "lumpsum")
             })
@@ -474,6 +573,140 @@ class HoldingsService:
         except Exception as e:
             logger.error(f"Update fund scheme failed: {e}")
             return False
+
+    @staticmethod
+    def update_holdings_only(fund_id_str, user_id, excel_file):
+        """
+        Updates ONLY the holdings (stock weights) for an existing fund.
+        Does NOT modify investment details, SIP config, or installments.
+        
+        This is used when users want to refresh their holdings data
+        after the mutual fund rebalances its portfolio.
+        
+        Returns:
+            dict: {"success": bool, "count": int, "message": str} or {"error": str}
+        """
+        try:
+            # 1. Verify fund exists and belongs to user
+            doc = holdings_collection.find_one({"_id": ObjectId(fund_id_str), "user_id": user_id})
+            if not doc:
+                return {"error": "Fund not found or access denied."}
+            
+            # 2. Parse Excel file (reuse existing logic)
+            try:
+                df_raw = pd.read_excel(excel_file.file, header=None)
+            except Exception as e:
+                return {"error": f"Failed to read Excel: {str(e)}"}
+            
+            # 3. Find header row
+            header_idx = None
+            for idx, row in df_raw.head(50).iterrows():
+                row_str = row.astype(str).str.upper().tolist()
+                has_isin = any("ISIN" in x.strip() for x in row_str if isinstance(x, str))
+                name_indicators = ["NAME", "INSTRUMENT", "ISSUER", "SECURITY", "COMPANY"]
+                has_name = any(
+                    any(indicator in x.strip() for indicator in name_indicators)
+                    for x in row_str if isinstance(x, str)
+                )
+                weight_indicators = ["%", "WEIGHT", "AUM", "ALLOCATION"]
+                has_weight = any(
+                    any(indicator in x.strip() for indicator in weight_indicators)
+                    for x in row_str if isinstance(x, str)
+                )
+                if has_isin and (has_name or has_weight):
+                    header_idx = idx
+                    break
+            
+            if header_idx is None:
+                return {"error": "Could not detect header row. Ensure file has 'ISIN' column."}
+            
+            excel_file.file.seek(0)
+            df = pd.read_excel(excel_file.file, header=header_idx)
+            
+            # 4. Normalize columns
+            col_map = {}
+            for col in df.columns:
+                c = str(col).strip().upper()
+                if "ISIN" in c:
+                    col_map[col] = "ISIN"
+                elif any(kw in c for kw in ["NAME", "INSTRUMENT", "ISSUER"]):
+                    col_map[col] = "Name"
+                elif "%" in c or "WEIGHT" in c or "AUM" in c or "ALLOCATION" in c:
+                    col_map[col] = "Weight"
+            
+            df = df.rename(columns=col_map)
+            
+            if "ISIN" not in df.columns or "Weight" not in df.columns:
+                return {"error": f"Missing required columns. Found: {list(df.columns)}"}
+            
+            # 5. Clean data
+            df = df.dropna(subset=["ISIN"])
+            df["ISIN"] = df["ISIN"].astype(str).str.strip().str.upper()
+            df = df[df["ISIN"].str.match(r'^[A-Z0-9]{12}$', na=False)]
+            df = df.drop_duplicates(subset=["ISIN"], keep="first")
+            
+            def clean_weight(val):
+                try:
+                    if pd.isna(val): return 0.0
+                    s = str(val).strip().replace("%", "")
+                    return float(s)
+                except: return 0.0
+            
+            df["Weight"] = df["Weight"].apply(clean_weight)
+            
+            # 6. Resolve tickers
+            nse_source = load_nse_csv()
+            holdings_list = []
+            bse_isin_map = None
+            
+            for _, row in df.iterrows():
+                isin = row["ISIN"]
+                name = row.get("Name", "Unknown")
+                weight = float(row["Weight"])
+                if weight <= 0:
+                    continue
+                
+                ticker = isin_to_symbol_nse(isin, nse_table=nse_source)
+                if ticker:
+                    holdings_list.append({"ISIN": isin, "Name": name, "Symbol": ticker, "Weight": weight})
+                else:
+                    if bse_isin_map is None:
+                        bse_isin_map = load_fyers_bse_isin_map()
+                    bse_symbol = (bse_isin_map or {}).get(isin)
+                    if bse_symbol:
+                        holdings_list.append({"ISIN": isin, "Name": name, "Symbol": bse_symbol, "Weight": weight})
+            
+            if not holdings_list:
+                return {"error": "No valid holdings resolved from the file."}
+            
+            # 7. Validate using schema
+            from models.db_schemas import HoldingItem
+            validated_holdings = []
+            for h in holdings_list:
+                validated_holdings.append(HoldingItem(**h))
+            
+            # 8. Update only holdings and timestamp
+            holdings_collection.update_one(
+                {"_id": ObjectId(fund_id_str)},
+                {
+                    "$set": {
+                        "holdings": [h.dict() for h in validated_holdings],
+                        "created_at": datetime.utcnow()  # Reset freshness timestamp
+                    }
+                }
+            )
+            
+            logger.info(f"Updated holdings for fund {fund_id_str}: {len(holdings_list)} holdings")
+            
+            return {
+                "success": True,
+                "count": len(holdings_list),
+                "message": f"Holdings updated successfully. {len(holdings_list)} stocks loaded."
+            }
+            
+        except Exception as e:
+            logger.error(f"Update holdings failed for {fund_id_str}: {e}")
+            return {"error": str(e)}
 
     @staticmethod
     def process_and_save_holdings(
@@ -812,12 +1045,10 @@ class HoldingsService:
                 # - future_sip_units = total from detailed installments
                 # - manual_total_units = total from detailed installments (for P&L calc)
                 
-                # Use CAS's exact cost_value if provided (most accurate - includes stamp duty)
-                # Otherwise use sum of raw transaction amounts
-                if cas_cost_value is not None and cas_cost_value > 0:
-                    final_invested_amount = round(cas_cost_value, 2)
-                else:
-                    final_invested_amount = round(total_detailed_invested, 2)  # Calculated with stamp duty
+                # Use sum of raw transaction amounts (what user actually paid)
+                # Units from CAS are already adjusted for stamp duty
+                # This shows the true "invested" amount to the user
+                final_invested_amount = round(total_detailed_invested, 2)
                 
                 future_sip_units = total_detailed_units
                 manual_total_units = total_detailed_units  # Override with actual units
@@ -985,7 +1216,10 @@ class HoldingsService:
                                 if used_date and used_date >= sip_date:
                                     # NAV is available for this SIP date or later
                                     # Calculate units - marked as ESTIMATED (T+1 settlement)
-                                    units = sip_amount / nav
+                                    # Stamp duty is deducted before unit calculation (0.005%)
+                                    stamp_duty = round(sip_amount * 0.00005, 2)
+                                    net_amount = sip_amount - stamp_duty
+                                    units = net_amount / nav
                                     inst["units"] = units
                                     inst["nav"] = nav
                                     inst["nav_date"] = nav_date_used

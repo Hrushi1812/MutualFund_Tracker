@@ -260,6 +260,42 @@ def sip_action(
 
 
 # ============================================================
+# UPDATE HOLDINGS ENDPOINT (Refresh stock weights only)
+# ============================================================
+
+@router.patch("/funds/{fund_id}/holdings")
+async def update_holdings(
+    fund_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update ONLY the holdings (stock weights) for an existing fund.
+    
+    This endpoint is used to refresh the portfolio's stock allocations
+    after the mutual fund rebalances. It does NOT modify:
+    - Investment amount
+    - Investment date
+    - SIP configuration
+    - SIP installments
+    
+    Use this when the "stale holdings" warning appears.
+    """
+    user_id = str(current_user["_id"])
+    
+    # Validate file type
+    if not file.filename.lower().endswith(('.xls', '.xlsx')):
+        raise HTTPException(400, "Invalid file format. Please upload an Excel file (.xls, .xlsx).")
+    
+    result = holdings_service.update_holdings_only(fund_id, user_id, file)
+    
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    
+    return result
+
+
+# ============================================================
 # CAS PARSING ENDPOINT (for Detailed SIP Mode)
 # ============================================================
 

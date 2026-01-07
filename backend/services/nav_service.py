@@ -536,6 +536,18 @@ class NavService:
         if not doc:
             return {"error": "Fund not found."}
 
+        # Get stale info for the response
+        stale_info = holdings_service._get_stale_info(doc.get("created_at"))
+
+        # Sync SIP installments (adds new PENDING installments for current month if needed)
+        # This ensures the user is prompted about new month's SIP if the day has passed
+        investment_type = doc.get("investment_type", "lumpsum")
+        if investment_type == "sip":
+            synced = holdings_service.sync_sip_installments(fund_id, user_id)
+            if synced:
+                # Re-fetch document to get updated installments
+                doc = holdings_service.get_holdings(fund_id, user_id)
+
         fund_name = doc.get("fund_name", "Unknown Fund")
         scheme_code = doc.get("scheme_code")
         if not scheme_code:
@@ -849,7 +861,9 @@ class NavService:
             "sip_pending_installments": sip_pending_installments,
             "has_estimated_units": has_estimated_units if investment_type == "sip" else False,
             "has_pending_nav_sip": has_pending_nav_sip,
-            "pending_nav_amount": round(pending_nav_amount, 2)
+            "pending_nav_amount": round(pending_nav_amount, 2),
+            "is_stale": stale_info["is_stale"],
+            "days_since_update": stale_info["days_since_update"]
         }
 
 

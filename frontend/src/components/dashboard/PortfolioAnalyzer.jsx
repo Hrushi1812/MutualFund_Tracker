@@ -216,6 +216,21 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                                     )}
                                 </div>
 
+                                {/* Stale Holdings Warning */}
+                                {result.is_stale && (
+                                    <div className="flex items-start gap-2 text-xs text-amber-400/80 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+                                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                        <div>
+                                            <span className="font-medium">
+                                                Holdings data is {result.days_since_update ? `${result.days_since_update} days` : ''} old
+                                            </span>
+                                            <span className="block text-amber-300/70">
+                                                Update from your AMC website for accurate live NAV estimation
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Delayed Data Notice - Clickable to connect Fyers */}
                                 {isUsingDelayedData && (
                                     <button
@@ -229,6 +244,7 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                                         <Zap className="w-3 h-3" />
                                     </button>
                                 )}
+
 
                                 {/* Pending NAV Warning - Units not yet allocated */}
                                 {result.investment_type === 'sip' && result.has_pending_nav_sip && (
