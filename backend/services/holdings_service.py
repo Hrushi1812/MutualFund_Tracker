@@ -575,6 +575,84 @@ class HoldingsService:
             return False
 
     @staticmethod
+    def _normalize_columns(df: pd.DataFrame) -> dict:
+        """
+        Robustly identifies ISIN, Name, and Weight columns.
+        Fixes issue where multiple columns could map to the same name (e.g. Name).
+        Returns a dictionary for renaming columns {old_col: new_valid_col}.
+        """
+        col_map = {}
+        
+        # Scored candidates: (column_name, score)
+        isin_candidates = []
+        name_candidates = []
+        weight_candidates = []
+
+        for col in df.columns:
+            c = str(col).strip().upper()
+            
+            # --- ISIN ---
+            score = 0
+            if "ISIN" in c:
+                score += 10
+                if c == "ISIN": score += 5
+            
+            if score > 0:
+                isin_candidates.append((col, score))
+
+            # --- Name ---
+            score = 0
+            # High priority keywords
+            if "NAME" in c:
+                score += 5
+                if "INSTRUMENT" in c: score += 5
+                elif "SCHEME" in c: score += 5
+                elif "SECURITY" in c: score += 5
+                elif "COMPANY" in c: score += 4
+                elif "ISSUER" in c: score += 3 # "Issuer Name" is less preferred than "Instrument Name" if both exist
+            
+            # Standalone keywords
+            if c in ["DESCRIPTION", "SCRIP", "SCRIPT", "PARTICULARS", "SECURITY"]:
+                score += 8 # Pretty high confidence
+            
+            # Lower priority but valid
+            if "INSTRUMENT" in c and "NAME" not in c: score += 3
+            
+            if score > 0:
+                name_candidates.append((col, score))
+
+            # --- Weight ---
+            score = 0
+            if "%" in c or "WEIGHT" in c or "ALLOCATION" in c or "AUM" in c or "HOLDING" in c:
+                if "%" in c: score += 5
+                if "WEIGHT" in c: score += 5
+                if "ALLOCATION" in c: score += 4
+                if "AUM" in c: score += 3
+                if "NET" in c and "ASSET" in c: score -= 2 # penalty for "Net Assets" value vs "% to Net Assets"
+                
+                # Boost if it explicitly mentions "to" or "of" (e.g. "% to AUM")
+                if "TO" in c or "OF" in c: score += 2
+            
+            if score > 0:
+                weight_candidates.append((col, score))
+
+        # Sort and pick best
+        isin_candidates.sort(key=lambda x: x[1], reverse=True)
+        name_candidates.sort(key=lambda x: x[1], reverse=True)
+        weight_candidates.sort(key=lambda x: x[1], reverse=True)
+
+        if isin_candidates:
+            col_map[isin_candidates[0][0]] = "ISIN"
+        
+        if name_candidates:
+            col_map[name_candidates[0][0]] = "Name"
+            
+        if weight_candidates:
+            col_map[weight_candidates[0][0]] = "Weight"
+            
+        return col_map
+
+    @staticmethod
     def update_holdings_only(fund_id_str, user_id, excel_file):
         """
         Updates ONLY the holdings (stock weights) for an existing fund.
@@ -624,15 +702,7 @@ class HoldingsService:
             df = pd.read_excel(excel_file.file, header=header_idx)
             
             # 4. Normalize columns
-            col_map = {}
-            for col in df.columns:
-                c = str(col).strip().upper()
-                if "ISIN" in c:
-                    col_map[col] = "ISIN"
-                elif any(kw in c for kw in ["NAME", "INSTRUMENT", "ISSUER"]):
-                    col_map[col] = "Name"
-                elif "%" in c or "WEIGHT" in c or "AUM" in c or "ALLOCATION" in c:
-                    col_map[col] = "Weight"
+            col_map = HoldingsService._normalize_columns(df)
             
             df = df.rename(columns=col_map)
             
@@ -795,71 +865,7 @@ class HoldingsService:
         df = pd.read_excel(excel_file.file, header=header_idx)
 
         # 3. Normalize Columns (ROBUST DETECTION)
-        col_map = {}
-        isin_found = False
-        name_found = False
-        weight_found = False
-        
-        for col in df.columns:
-            c = str(col).strip().upper()
-            
-            # ISIN Detection (various formats)
-            if not isin_found:
-                if "ISIN" in c or c in ["ISIN", "ISIN CODE", "ISIN NO", "ISIN NUMBER"]:
-                    col_map[col] = "ISIN"
-                    isin_found = True
-                    continue
-            
-            # Name Detection (flexible - many possible column names)
-            if not name_found:
-                name_keywords = ["INSTRUMENT", "ISSUER", "COMPANY", "SECURITY", "STOCK", "SCHEME", "FUND"]
-                # Check if column contains NAME + any keyword, OR just is a name-like column
-                if "NAME" in c:
-                    # Has "NAME" - check if it's combined with a keyword or standalone
-                    if any(kw in c for kw in name_keywords) or c in ["NAME", "SCHEME NAME", "FUND NAME", "SECURITY NAME", "COMPANY NAME"]:
-                        col_map[col] = "Name"
-                        name_found = True
-                        continue
-                # Also check for standalone keywords that likely mean name
-                elif c in ["DESCRIPTION", "SCRIP", "SCRIPT", "PARTICULARS"]:
-                    col_map[col] = "Name"
-                    name_found = True
-                    continue
-                # Handle columns like "Name of the Instrument / Issuer"
-                elif any(kw in c for kw in ["INSTRUMENT", "ISSUER"]) and ("NAME" in c or "OF THE" in c):
-                    col_map[col] = "Name"
-                    name_found = True
-                    continue
-            
-            # Weight/Allocation Detection (very flexible - handles many formats)
-            if not weight_found:
-                # Check for percentage-based columns
-                weight_keywords = ["AUM", "ASSET", "NAV", "WEIGHT", "ALLOCATION", "HOLDING", "PORTFOLIO"]
-                
-                if "%" in c:
-                    # Has % symbol - likely a weight column
-                    for kw in weight_keywords:
-                        if kw in c:
-                            col_map[col] = "Weight"
-                            weight_found = True
-                            break
-                    # Also accept "% TO AUM", "% OF AUM", etc.
-                    if not weight_found and ("TO" in c or "OF" in c):
-                        col_map[col] = "Weight"
-                        weight_found = True
-                    # Last resort - any column with just "%" and looks like weight
-                    if not weight_found and ("WEIGHT" in c or "ALLOC" in c):
-                        col_map[col] = "Weight"
-                        weight_found = True
-                
-                # Handle columns without % symbol but clearly weight-related
-                if not weight_found:
-                    if c in ["WEIGHT", "WEIGHTAGE", "ALLOCATION", "PORTFOLIO WEIGHT", "% TO AUM", "AUM %"]:
-                        col_map[col] = "Weight"
-                        weight_found = True
-                    elif ("WEIGHT" in c or "ALLOC" in c) and "NET" not in c:  # Avoid "Net Asset" columns
-                        col_map[col] = "Weight"
-                        weight_found = True
+        col_map = HoldingsService._normalize_columns(df)
         
         df = df.rename(columns=col_map)
         

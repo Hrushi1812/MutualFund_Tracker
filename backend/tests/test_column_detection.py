@@ -1,73 +1,36 @@
-"""
-Test script for robust Excel column detection
-Tests various column name formats from different AMC portfolio disclosures
-"""
+import sys
+print("Starting test execution...", flush=True)
+import os
+from unittest.mock import MagicMock
+
+# Mock db module to avoid connection during test
+sys.modules['db'] = MagicMock()
+sys.modules['core.logging'] = MagicMock()
+sys.modules['utils.common'] = MagicMock()
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pandas as pd
-import io
+from services.holdings_service import HoldingsService
 
-# Simulate the column detection logic
 def test_column_detection(columns):
     """Test the column detection logic against various column formats"""
-    col_map = {}
-    isin_found = False
-    name_found = False
-    weight_found = False
+    # Create a dummy dataframe with these columns
+    df = pd.DataFrame(columns=columns)
     
-    for col in columns:
-        c = str(col).strip().upper()
-        
-        # ISIN Detection
-        if not isin_found:
-            if "ISIN" in c or c in ["ISIN", "ISIN CODE", "ISIN NO", "ISIN NUMBER"]:
-                col_map[col] = "ISIN"
-                isin_found = True
-                continue
-        
-        # Name Detection
-        if not name_found:
-            name_keywords = ["INSTRUMENT", "ISSUER", "COMPANY", "SECURITY", "STOCK", "SCHEME", "FUND"]
-            if "NAME" in c:
-                if any(kw in c for kw in name_keywords) or c in ["NAME", "SCHEME NAME", "FUND NAME", "SECURITY NAME", "COMPANY NAME"]:
-                    col_map[col] = "Name"
-                    name_found = True
-                    continue
-            elif c in ["DESCRIPTION", "SCRIP", "SCRIPT", "PARTICULARS"]:
-                col_map[col] = "Name"
-                name_found = True
-                continue
-            elif any(kw in c for kw in ["INSTRUMENT", "ISSUER"]) and ("NAME" in c or "OF THE" in c):
-                col_map[col] = "Name"
-                name_found = True
-                continue
-        
-        # Weight Detection
-        if not weight_found:
-            weight_keywords = ["AUM", "ASSET", "NAV", "WEIGHT", "ALLOCATION", "HOLDING", "PORTFOLIO"]
-            
-            if "%" in c:
-                for kw in weight_keywords:
-                    if kw in c:
-                        col_map[col] = "Weight"
-                        weight_found = True
-                        break
-                if not weight_found and ("TO" in c or "OF" in c):
-                    col_map[col] = "Weight"
-                    weight_found = True
-                if not weight_found and ("WEIGHT" in c or "ALLOC" in c):
-                    col_map[col] = "Weight"
-                    weight_found = True
-            
-            if not weight_found:
-                if c in ["WEIGHT", "WEIGHTAGE", "ALLOCATION", "PORTFOLIO WEIGHT", "% TO AUM", "AUM %"]:
-                    col_map[col] = "Weight"
-                    weight_found = True
-                elif ("WEIGHT" in c or "ALLOC" in c) and "NET" not in c:
-                    col_map[col] = "Weight"
-                    weight_found = True
+    # Run normalization
+    col_map = HoldingsService._normalize_columns(df)
     
-    return col_map, isin_found, name_found, weight_found
-
+    # Check what we found
+    isin_found = "ISIN" in col_map.values()
+    name_found = "Name" in col_map.values()
+    weight_found = "Weight" in col_map.values()
+    
+    # Check for duplicates in values (multiple cols mapped to same target)
+    targets = list(col_map.values())
+    has_duplicates = len(targets) != len(set(targets))
+    
+    return col_map, isin_found, name_found, weight_found, has_duplicates
 
 # Test cases - different AMC formats
 test_cases = [
@@ -114,6 +77,13 @@ test_cases = [
         "columns": ["Description", "ISIN Number", "Allocation %"],
         "expected": {"ISIN": True, "Name": True, "Weight": True}
     },
+    # BUG REPRODUCTION: Duplicate Name columns
+    {
+        "name": "Duplicate Name Columns (Fix Verification)",
+        "columns": ["Instrument Name", "Issuer Name", "ISIN", "% to AUM"],
+        "expected": {"ISIN": True, "Name": True, "Weight": True},
+        "should_fail_if_duplicate_targets": True
+    },
 ]
 
 print("=" * 70)
@@ -122,14 +92,15 @@ print("=" * 70)
 
 all_passed = True
 for test in test_cases:
-    col_map, isin, name, weight = test_column_detection(test["columns"])
+    col_map, isin, name, weight, has_duplicates = test_column_detection(test["columns"])
     
     # Check results
     isin_ok = isin == test["expected"]["ISIN"]
     name_ok = name == test["expected"]["Name"]
     weight_ok = weight == test["expected"]["Weight"]
+    dup_ok = not has_duplicates
     
-    passed = isin_ok and name_ok and weight_ok
+    passed = isin_ok and name_ok and weight_ok and dup_ok
     all_passed = all_passed and passed
     
     status = "[PASS]" if passed else "[FAIL]"
@@ -137,6 +108,7 @@ for test in test_cases:
     print(f"  Columns: {test['columns']}")
     print(f"  Detected: {col_map}")
     print(f"  ISIN: {'OK' if isin_ok else 'X'} | Name: {'OK' if name_ok else 'X'} | Weight: {'OK' if weight_ok else 'X'}")
+    print(f"  Unique Targets: {'OK' if dup_ok else 'FAIL (Duplicates Mapped)'}")
 
 print("\n" + "=" * 70)
 if all_passed:
