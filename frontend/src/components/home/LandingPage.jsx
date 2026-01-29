@@ -6,6 +6,7 @@ import Features from "./Features";
 import HowItWorks from "./HowItWorks";
 import FyersInfo from "./FyersInfo";
 import DemoSection from "./DemoSection";
+import FAQ from "./FAQ";
 import CTA from "./CTA";
 import api from "../../api";
 
@@ -14,8 +15,9 @@ const LandingPage = () => {
     useEffect(() => {
         api.get("/").catch(() => { }); // Silent ping, ignore errors
     }, []);
+
     return (
-        <div className="bg-background text-foreground min-h-screen selection:bg-primary selection:text-white">
+        <div className="bg-background text-foreground min-h-screen selection:bg-primary selection:text-white aurora-bg">
             <Navbar />
             <main>
                 <Hero />
@@ -23,6 +25,7 @@ const LandingPage = () => {
                 <HowItWorks />
                 <FyersInfo />
                 <DemoSection />
+                <FAQ />
                 <CTA />
             </main>
             <Footer />

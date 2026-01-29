@@ -1,6 +1,7 @@
-import React, { useState, useContext } from 'react';
-import { LayoutDashboard, LogOut, PieChart, User, Settings } from 'lucide-react';
+import React, { useState, useContext, useRef, useEffect } from 'react';
+import { LayoutDashboard, LogOut, PieChart, User, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import UploadHoldings from '../components/dashboard/UploadHoldings';
 import FundList from '../components/dashboard/FundList';
 import PortfolioAnalyzer from '../components/dashboard/PortfolioAnalyzer';
@@ -13,11 +14,35 @@ const Dashboard = () => {
     const { user, logout } = useContext(AuthContext);
     const [selectedFund, setSelectedFund] = useState(null);
     const [showSettings, setShowSettings] = useState(false);
+    const settingsRef = useRef(null);
+    const buttonRef = useRef(null);
 
     const handleLogout = () => {
         logout();
         navigate('/');
     };
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (
+                settingsRef.current &&
+                !settingsRef.current.contains(event.target) &&
+                buttonRef.current &&
+                !buttonRef.current.contains(event.target)
+            ) {
+                setShowSettings(false);
+            }
+        };
+
+        if (showSettings) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showSettings]);
 
     return (
         <div className="min-h-screen bg-background text-foreground">
@@ -38,13 +63,51 @@ const Dashboard = () => {
                                 <span>Hi, {user.username}</span>
                             </div>
                         )}
-                        <button
-                            onClick={() => setShowSettings(!showSettings)}
-                            className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
-                            title="Settings"
-                        >
-                            <Settings className="w-5 h-5" />
-                        </button>
+
+                        {/* Settings Button with Floating Dropdown */}
+                        <div className="relative">
+                            <button
+                                ref={buttonRef}
+                                onClick={() => setShowSettings(!showSettings)}
+                                className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-accent/20 text-accent' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+                                title="Settings"
+                            >
+                                <Settings className="w-5 h-5" />
+                            </button>
+
+                            {/* Floating Settings Dropdown */}
+                            <AnimatePresence>
+                                {showSettings && (
+                                    <motion.div
+                                        ref={settingsRef}
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        transition={{ duration: 0.15 }}
+                                        className="absolute right-0 top-full mt-2 w-72 md:w-96 z-50"
+                                    >
+                                        <div className="bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+                                            {/* Header */}
+                                            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                                                <h3 className="font-semibold text-white">Settings</h3>
+                                                <button
+                                                    onClick={() => setShowSettings(false)}
+                                                    className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+
+                                            {/* Content */}
+                                            <div className="p-4">
+                                                <FyersConnectionCard compact />
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
                         <button
                             onClick={handleLogout}
                             className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
@@ -58,7 +121,7 @@ const Dashboard = () => {
 
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-                
+
                 {/* Fyers Banner - Shows when reconnection needed */}
                 <FyersBanner />
 
@@ -69,21 +132,14 @@ const Dashboard = () => {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    {/* Main Column */}
-                    <div className={`${showSettings ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-8`}>
+                    {/* Main Column - Always full width now */}
+                    <div className="lg:col-span-12 space-y-8">
                         <UploadHoldings />
 
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-6 shadow-xl">
                             <FundList onSelect={(fund) => setSelectedFund(fund)} />
                         </div>
                     </div>
-                    
-                    {/* Settings Sidebar */}
-                    {showSettings && (
-                        <div className="lg:col-span-4 space-y-6">
-                            <FyersConnectionCard />
-                        </div>
-                    )}
                 </div>
             </main>
 
