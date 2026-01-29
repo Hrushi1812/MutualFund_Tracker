@@ -37,3 +37,4 @@ pydantic[email]
 passlib[argon2]
 python-jose[cryptography]
 casparser[mupdf]
+pandas_market_calendars

@@ -160,6 +160,43 @@ class FyersService:
             logger.warning(f"Fyers token validation error: {e}")
             return False
 
+    def get_market_status(self) -> Optional[Dict[str, Any]]:
+        """
+        Get real-time market status from Fyers API.
+        Returns dict with exchange status info, or None if not authenticated/failed.
+        """
+        if not self.is_authenticated() or not self._fyers:
+            return None
+        
+        try:
+            response = self._fyers.market_status()
+            if response.get("s") == "ok":
+                return response
+            else:
+                logger.debug(f"Market status check failed: {response}")
+                return None
+        except Exception as e:
+            logger.debug(f"Market status error: {e}")
+            return None
+
+    def is_nse_market_open_live(self) -> Optional[bool]:
+        """
+        Check if NSE equity market is currently open using live Fyers API.
+        Returns True/False, or None if unable to determine.
+        """
+        status = self.get_market_status()
+        if not status:
+            return None
+        
+        try:
+            for market in status.get("marketStatus", []):
+                if market.get("exchange") == "NSE" and market.get("segment") == "CM":
+                    return market.get("status") == "OPEN"
+        except Exception:
+            pass
+        
+        return None
+
     def clear_token(self):
         """Clear the cached token (disconnect)."""
         self._access_token = None
