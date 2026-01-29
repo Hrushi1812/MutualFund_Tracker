@@ -12,7 +12,7 @@ import { useFyers } from '../../context/FyersContext';
  * - Token expiry info
  * - Clear explanation of what Fyers provides
  */
-const FyersConnectionCard = () => {
+const FyersConnectionCard = ({ compact = false }) => {
     const {
         authenticated,
         configured,
@@ -25,7 +25,7 @@ const FyersConnectionCard = () => {
         toggleOptOut,
         checkFyersStatus,
     } = useFyers();
-    
+
     const [connecting, setConnecting] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
     const [pollIntervalId, setPollIntervalId] = useState(null);
@@ -44,7 +44,7 @@ const FyersConnectionCard = () => {
             setConnecting(true);
             const authUrl = await getAuthUrl();
             window.open(authUrl, '_blank', 'width=600,height=700');
-            
+
             // Poll for status after user completes OAuth (every 10s for 2 min)
             let attempts = 0;
             const maxAttempts = 12;
@@ -86,9 +86,9 @@ const FyersConnectionCard = () => {
     };
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+        <div className={compact ? "" : "bg-white/5 border border-white/10 rounded-2xl overflow-hidden"}>
             {/* Header */}
-            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+            <div className={`p-4 flex items-center justify-between ${compact ? "" : "border-b border-white/5"}`}>
                 <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${isConnected ? 'bg-green-500/20' : 'bg-zinc-500/20'}`}>
                         <Zap className={`w-5 h-5 ${isConnected ? 'text-green-500' : 'text-zinc-400'}`} />
@@ -98,15 +98,14 @@ const FyersConnectionCard = () => {
                         <p className="text-xs text-zinc-400">Powered by Fyers API</p>
                     </div>
                 </div>
-                
+
                 {/* Status Badge */}
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                    isConnected 
-                        ? 'bg-green-500/20 text-green-400' 
-                        : userOptedOut 
-                            ? 'bg-zinc-500/20 text-zinc-400'
-                            : 'bg-amber-500/20 text-amber-400'
-                }`}>
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isConnected
+                    ? 'bg-green-500/20 text-green-400'
+                    : userOptedOut
+                        ? 'bg-zinc-500/20 text-zinc-400'
+                        : 'bg-amber-500/20 text-amber-400'
+                    }`}>
                     {isConnected ? (
                         <>
                             <Check className="w-3 h-3" />
@@ -125,7 +124,7 @@ const FyersConnectionCard = () => {
                     )}
                 </div>
             </div>
-            
+
             {/* Content */}
             <div className="p-4 space-y-4">
                 {/* Info Toggle */}
@@ -136,7 +135,7 @@ const FyersConnectionCard = () => {
                     <Settings className="w-4 h-4" />
                     {showInfo ? 'Hide details' : 'Why connect Fyers?'}
                 </button>
-                
+
                 {showInfo && (
                     <div className="bg-white/5 rounded-xl p-4 text-sm space-y-3">
                         <div className="flex items-start gap-3">
@@ -150,7 +149,7 @@ const FyersConnectionCard = () => {
                                 </p>
                             </div>
                         </div>
-                        
+
                         <div className="flex items-start gap-3">
                             <div className="p-1.5 bg-zinc-500/20 rounded-lg shrink-0">
                                 <Clock className="w-4 h-4 text-zinc-400" />
@@ -162,7 +161,7 @@ const FyersConnectionCard = () => {
                                 </p>
                             </div>
                         </div>
-                        
+
                         <div className="pt-2 border-t border-white/5 space-y-2">
                             <p className="text-xs text-zinc-300 font-medium">How to get started with Fyers:</p>
                             <ol className="text-xs text-zinc-500 space-y-1 list-decimal list-inside">
@@ -172,13 +171,13 @@ const FyersConnectionCard = () => {
                                 <li>Sessions expire every 24 hours for security - just reconnect when prompted</li>
                             </ol>
                         </div>
-                        
+
                         <p className="text-xs text-zinc-500 pt-2 border-t border-white/5">
                             💡 <strong>Pro tip:</strong> The app never stops working if Fyers is unavailable. It automatically falls back to delayed data.
                         </p>
                     </div>
                 )}
-                
+
                 {/* Token Expiry Info */}
                 {authenticated && tokenExpiry && (
                     <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -186,7 +185,7 @@ const FyersConnectionCard = () => {
                         Session expires: {formatExpiry(tokenExpiry)}
                     </div>
                 )}
-                
+
                 {/* Actions */}
                 <div className="flex flex-wrap gap-2">
                     {!authenticated ? (
@@ -209,7 +208,7 @@ const FyersConnectionCard = () => {
                                     </>
                                 )}
                             </button>
-                            
+
                             {!userOptedOut && (
                                 <button
                                     onClick={() => toggleOptOut(true)}
@@ -228,7 +227,7 @@ const FyersConnectionCard = () => {
                                 <RefreshCw className="w-4 h-4" />
                                 Refresh Status
                             </button>
-                            
+
                             <button
                                 onClick={handleDisconnect}
                                 className="inline-flex items-center gap-2 px-4 py-2 text-red-400 hover:text-red-300 text-sm transition-colors"
@@ -239,7 +238,7 @@ const FyersConnectionCard = () => {
                         </>
                     )}
                 </div>
-                
+
                 {/* Opt-out Toggle */}
                 {userOptedOut && (
                     <div className="flex items-center justify-between pt-2 border-t border-white/5">
@@ -252,7 +251,7 @@ const FyersConnectionCard = () => {
                         </button>
                     </div>
                 )}
-                
+
                 {/* Not configured warning */}
                 {!configured && (
                     <p className="text-xs text-amber-400/80 bg-amber-500/10 p-2 rounded-lg">

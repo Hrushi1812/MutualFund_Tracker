@@ -25,7 +25,7 @@
 }
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans), system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -42,6 +42,7 @@
 html.lenis,
 html.lenis body {
   height: auto;
+  overflow-x: hidden;
 }
 
 .lenis.lenis-smooth {
@@ -71,4 +72,48 @@ html.lenis body {
 .glass-hover:hover {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Vibrant Aurora Background Animation */
+@keyframes aurora {
+
+  0%,
+  100% {
+    background-position: 0% 50%, 50% 50%, 100% 50%;
+  }
+
+  25% {
+    background-position: 50% 0%, 0% 100%, 50% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%, 50% 0%, 0% 50%;
+  }
+
+  75% {
+    background-position: 50% 100%, 100% 50%, 50% 0%;
+  }
+}
+
+.aurora-bg {
+  position: relative;
+  background-color: #09090b;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(59, 130, 246, 0.35), transparent),
+    /* Blue-500 */
+    radial-gradient(ellipse 60% 40% at 80% 60%, rgba(96, 165, 250, 0.3), transparent),
+    /* Blue-400 */
+    radial-gradient(ellipse 50% 60% at 50% 30%, rgba(29, 78, 216, 0.25), transparent);
+  /* Blue-700 */
+  background-size: 200% 200%, 200% 200%, 200% 200%;
+  animation: aurora 15s ease-in-out infinite;
+}
+
+.aurora-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(80px);
+  pointer-events: none;
+  z-index: -1;
 }
