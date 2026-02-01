@@ -68,15 +68,25 @@ def is_nse_holiday(date_obj):
     """
     Check if a given date is an NSE holiday.
     Uses pandas_market_calendars if available, else falls back to hardcoded list.
+
+    Note: Weekends are non-trading days but are not treated as "holidays" by this function.
     """
     _init_nse_calendar()
 
-    date_str = date_obj.strftime("%Y-%m-%d")
+    # Normalize to a date-like object
+    target_date = date_obj.date() if hasattr(date_obj, "date") else date_obj
+
+    # Do not classify weekends as exchange holidays
+    if target_date.weekday() >= 5:  # 5=Sat, 6=Sun
+        return False
+
+    date_str = target_date.strftime("%Y-%m-%d")
 
     if _nse_calendar is not None:
         try:
             import pandas as pd
-            # Check if this date is a valid session (trading day)
+            # Check if this date is a valid session (trading day).
+            # On weekdays, a lack of valid sessions indicates an exchange holiday.
             return _nse_calendar.valid_days(start_date=date_str, end_date=date_str).size == 0
         except Exception:
             logger.exception(f"Error checking NSE calendar for {date_str}")
