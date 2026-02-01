@@ -43,7 +43,7 @@ def _init_nse_calendar():
         # Library not available; _nse_calendar stays None, fallback will be used
         logger.warning("pandas_market_calendars not available, using fallback holidays")
         _nse_calendar = None
-    except Exception as e:
+    except Exception:
         logger.exception("Error initializing NSE calendar")
         _nse_calendar = None
 
@@ -78,7 +78,7 @@ def is_nse_holiday(date_obj):
             import pandas as pd
             # Check if this date is a valid session (trading day)
             return _nse_calendar.valid_days(start_date=date_str, end_date=date_str).size == 0
-        except Exception as e:
+        except Exception:
             logger.exception(f"Error checking NSE calendar for {date_str}")
 
     # Fallback to hardcoded set

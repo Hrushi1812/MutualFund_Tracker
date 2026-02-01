@@ -193,7 +193,7 @@ class FyersService:
                 if market.get("exchange") == "NSE" and market.get("segment") == "CM":
                     return market.get("status") == "OPEN"
         except Exception:
-            pass
+            logger.debug("Error checking market status", exc_info=True, extra={"status": status})
         
         return None
 
