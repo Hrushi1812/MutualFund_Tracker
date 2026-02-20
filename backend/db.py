@@ -8,8 +8,12 @@ from core.config import settings
 load_dotenv()
 
 try:
-    # Use certifi for explicit CA bundle (fixes SSL errors on some Windows/Mac setups)
-    client = MongoClient(settings.MONGO_URI, tlsCAFile=certifi.where())
+    # Only use TLS CA bundle for Atlas (mongodb+srv://) or explicit TLS connections
+    uri = settings.MONGO_URI
+    connect_kwargs = {}
+    if uri.startswith("mongodb+srv://") or "tls=true" in uri or "ssl=true" in uri:
+        connect_kwargs["tlsCAFile"] = certifi.where()
+    client = MongoClient(uri, **connect_kwargs)
     # The ismaster command is cheap and does not require auth.
     client.admin.command('ismaster')
     print("✅ Connected to MongoDB successfully!")
