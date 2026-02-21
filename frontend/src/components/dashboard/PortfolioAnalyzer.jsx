@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { X, Calculator, Calendar, IndianRupee, TrendingUp, TrendingDown, Loader2, Clock, Zap, AlertTriangle } from 'lucide-react';
+import { X, Calculator, Calendar, IndianRupee, TrendingUp, TrendingDown, Clock, Zap, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api';
 import { FyersContext } from '../../context/FyersContext';
@@ -113,17 +113,95 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                     {/* Content */}
                     <div className="p-6">
                         {loading ? (
-                            <div className="flex flex-col items-center justify-center py-10 space-y-4">
-                                <div className="relative">
-                                    <div className="w-16 h-16 border-4 border-white/10 border-t-accent rounded-full animate-spin"></div>
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="w-8 h-8 bg-accent/20 rounded-full animate-pulse"></div>
+                            <div className="space-y-6">
+                                {/* Accent progress scanner */}
+                                <div className="overflow-hidden rounded-full">
+                                    <div className="skeleton-progress-line" />
+                                </div>
+
+                                {/* 3-col Metrics Skeleton with staggered entrance */}
+                                <motion.div
+                                    className="grid grid-cols-3 gap-2 sm:gap-4"
+                                    initial="hidden"
+                                    animate="visible"
+                                    variants={{
+                                        hidden: {},
+                                        visible: { transition: { staggerChildren: 0.15 } }
+                                    }}
+                                >
+                                    {['Invested', '1D Returns', 'Total Returns'].map((label, i) => (
+                                        <motion.div
+                                            key={label}
+                                            className="flex flex-col gap-2"
+                                            variants={{
+                                                hidden: { opacity: 0, y: 12 },
+                                                visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
+                                            }}
+                                        >
+                                            <span className="text-[10px] sm:text-xs text-zinc-600 font-medium tracking-wide">
+                                                {label}
+                                            </span>
+                                            <div className={`skeleton-bone ${i === 0 ? 'h-6 w-24' : i === 1 ? 'h-5 w-16 mx-auto' : 'h-5 w-20 ml-auto'}`} />
+                                            <div className={`skeleton-bone h-3 ${i === 0 ? 'w-16' : i === 1 ? 'w-12 mx-auto' : 'w-14 ml-auto'}`} />
+                                        </motion.div>
+                                    ))}
+                                </motion.div>
+
+                                {/* Mini Heartbeat Chart — feels alive */}
+                                <motion.div
+                                    className="flex items-end justify-center gap-[3px] h-8 py-1"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.5, duration: 0.4 }}
+                                >
+                                    {[0.5, 0.8, 0.4, 1, 0.6, 0.9, 0.3, 0.7, 0.95, 0.55, 0.85, 0.45].map((h, i) => (
+                                        <div
+                                            key={i}
+                                            className="skeleton-chart-bar w-[6px]"
+                                            style={{
+                                                height: `${h * 100}%`,
+                                                animationDelay: `${i * 0.1}s`,
+                                            }}
+                                        />
+                                    ))}
+                                </motion.div>
+
+                                {/* Secondary Info Card Skeleton */}
+                                <motion.div
+                                    className="bg-white/[0.03] rounded-2xl p-4 border border-white/5 space-y-3"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.35, duration: 0.5 }}
+                                >
+                                    {/* Current Value row */}
+                                    <div className="flex justify-between items-center">
+                                        <div className="skeleton-bone h-4 w-24" />
+                                        <div className="skeleton-bone h-6 w-28" />
                                     </div>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-white font-medium">Analyzing Portfolio...</p>
-                                    <p className="text-sm text-zinc-500 mt-1">Fetching real-time NAV and calculating P&L</p>
-                                </div>
+                                    <div className="h-px bg-white/5" />
+                                    {/* NAV row */}
+                                    <div className="flex justify-between items-center">
+                                        <div className="skeleton-bone h-4 w-20" />
+                                        <div className="flex items-center gap-2">
+                                            {/* 3D coin flip */}
+                                            <div className="skeleton-coin w-5 h-5 rounded-full bg-gradient-to-br from-accent/40 to-indigo-400/20 border border-accent/30 flex items-center justify-center">
+                                                <span className="text-[8px] text-accent/60 font-bold">₹</span>
+                                            </div>
+                                            <div className="skeleton-bone h-4 w-16" />
+                                        </div>
+                                    </div>
+                                </motion.div>
+
+                                {/* Footer note skeleton */}
+                                <motion.div
+                                    className="flex flex-col items-center gap-1.5 pt-1"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.6, duration: 0.4 }}
+                                >
+                                    <div className="skeleton-bone h-2 w-44" />
+                                    <div className="skeleton-bone h-2 w-28" />
+                                </motion.div>
                             </div>
                         ) : error ? (
                             <div className="flex flex-col items-center justify-center py-6 text-center">
