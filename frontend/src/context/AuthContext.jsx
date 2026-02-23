@@ -43,7 +43,13 @@ export const AuthProvider = ({ children }) => {
             return { success: true };
         } catch (error) {
             console.error("Login failed", error);
-            return { success: false, message: error.response?.data?.detail || "Login failed" };
+            // When error.response is missing, it means the server never replied (network error)
+            const isNetworkError = !error.response;
+            return {
+                success: false,
+                isNetworkError,
+                message: error.response?.data?.detail || "Login failed"
+            };
         }
     };
 

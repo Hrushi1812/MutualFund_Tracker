@@ -1,0 +1,506 @@
+/* ══════════════════════════════════════════════
+   Server Wake-Up Screen — v3 (Premium Polish)
+   ══════════════════════════════════════════════ */
+
+/* ── Root Overlay ── */
+.wakeup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #09090b;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+/* ── Aurora Blobs ── */
+.wakeup-aurora {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.wakeup-aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(100px);
+    animation: aurora-drift 12s ease-in-out infinite alternate;
+}
+
+.wakeup-aurora-blob--1 {
+    width: 500px;
+    height: 500px;
+    top: 10%;
+    left: 15%;
+    background: rgba(99, 102, 241, 0.2);
+}
+
+.wakeup-aurora-blob--2 {
+    width: 400px;
+    height: 400px;
+    bottom: 15%;
+    right: 10%;
+    background: rgba(59, 130, 246, 0.15);
+    animation-delay: -4s;
+}
+
+.wakeup-aurora-blob--3 {
+    width: 300px;
+    height: 300px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(139, 92, 246, 0.1);
+    animation-name: aurora-drift-centered;
+    animation-delay: -8s;
+}
+
+@keyframes aurora-drift {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.6;
+    }
+
+    50% {
+        transform: translate(30px, -20px) scale(1.1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(-20px, 15px) scale(0.95);
+        opacity: 0.7;
+    }
+}
+
+/* Dedicated keyframe for blob 3 — preserves translate(-50%,-50%) centering */
+@keyframes aurora-drift-centered {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+    }
+
+    50% {
+        transform: translate(calc(-50% + 30px), calc(-50% - 20px)) scale(1.1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(calc(-50% - 20px), calc(-50% + 15px)) scale(0.95);
+        opacity: 0.7;
+    }
+}
+
+/* ── Floating Particles ── */
+.wakeup-particles {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.wakeup-particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: rgba(129, 140, 248, 0.4);
+    border-radius: 50%;
+    animation-name: particle-float;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    /* duration & delay set via inline styles in JSX for per-particle variation */
+}
+
+@keyframes particle-float {
+    0% {
+        transform: translateY(100vh) scale(0);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+        transform: translateY(90vh) scale(1);
+    }
+
+    90% {
+        opacity: 0.6;
+    }
+
+    100% {
+        transform: translateY(-10vh) scale(0.5);
+        opacity: 0;
+    }
+}
+
+/* ── Content Card with Animated Border ── */
+.wakeup-card {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 90%;
+    max-width: 480px;
+    padding: 40px 32px;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 24px;
+    overflow: hidden;
+}
+
+/* Animated gradient border using pseudo-element */
+.wakeup-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 24px;
+    padding: 1px;
+    background: linear-gradient(var(--border-angle, 0deg),
+            rgba(99, 102, 241, 0.4),
+            rgba(59, 130, 246, 0.1),
+            rgba(139, 92, 246, 0.3),
+            rgba(59, 130, 246, 0.1));
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: rotate-border 6s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes rotate-border {
+    to {
+        --border-angle: 360deg;
+    }
+}
+
+@property --border-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+
+/* ── Icon Hub (with orbital ring) ── */
+.wakeup-icon-hub {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wakeup-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(59, 130, 246, 0.2));
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    animation: icon-breathe 3s ease-in-out infinite;
+}
+
+.wakeup-icon svg {
+    width: 22px;
+    height: 22px;
+    color: #a5b4fc;
+}
+
+@keyframes icon-breathe {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.15);
+    }
+
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 24px 4px rgba(99, 102, 241, 0.1);
+    }
+}
+
+/* Orbital ring */
+.wakeup-orbit {
+    position: absolute;
+    inset: -2px;
+    border: 1px dashed rgba(129, 140, 248, 0.2);
+    border-radius: 50%;
+    animation: orbit-spin 8s linear infinite;
+}
+
+.wakeup-orbit-dot {
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 6px;
+    background: #818cf8;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(129, 140, 248, 0.6);
+}
+
+@keyframes orbit-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── Title ── */
+.wakeup-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+    text-align: center;
+    letter-spacing: -0.01em;
+}
+
+.wakeup-subtitle {
+    font-size: 0.78rem;
+    color: #64748b;
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+/* ── Status Lines ── */
+.wakeup-status-area {
+    width: 100%;
+    min-height: 100px;
+    margin-bottom: 20px;
+}
+
+.wakeup-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 0;
+    opacity: 0;
+    animation: line-slide-in 0.45s ease forwards;
+}
+
+@keyframes line-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(-12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Status indicator (dot / checkmark / spinner) */
+.wakeup-indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.wakeup-indicator--active {
+    border: 2px solid #818cf8;
+    border-top-color: transparent;
+    animation: indicator-spin 0.8s linear infinite;
+}
+
+@keyframes indicator-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.wakeup-indicator--done {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.wakeup-indicator--done svg {
+    width: 10px;
+    height: 10px;
+    color: #4ade80;
+}
+
+.wakeup-indicator--success-final {
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.wakeup-indicator--success-final svg {
+    width: 12px;
+    height: 12px;
+    color: #4ade80;
+}
+
+.wakeup-line-text {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    transition: color 0.3s ease;
+}
+
+.wakeup-line-text--active {
+    color: #c7d2fe;
+}
+
+.wakeup-line-text--done {
+    color: #64748b;
+}
+
+.wakeup-line-text--success {
+    color: #4ade80;
+    font-weight: 600;
+}
+
+/* ── Divider ── */
+.wakeup-divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    margin-bottom: 20px;
+}
+
+/* ── Progress Bar ── */
+.wakeup-progress-container {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.wakeup-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.wakeup-progress-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.wakeup-progress-percent {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.wakeup-progress-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.wakeup-progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #6366f1, #818cf8, #60a5fa);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.wakeup-progress-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* ── Rotating Tip ── */
+.wakeup-tip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    border-radius: 10px;
+    width: 100%;
+}
+
+.wakeup-tip-icon {
+    flex-shrink: 0;
+    color: #818cf8;
+    width: 14px;
+    height: 14px;
+}
+
+.wakeup-tip-text {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+/* ── Flash on Success ── */
+@keyframes success-flash {
+    0% {
+        opacity: 0;
+    }
+
+    20% {
+        opacity: 0.12;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+.wakeup-flash {
+    position: fixed;
+    inset: 0;
+    background: rgba(99, 102, 241, 0.1);
+    z-index: 9998;
+    pointer-events: none;
+    animation: success-flash 0.6s ease-out forwards;
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+    .wakeup-card {
+        padding: 28px 20px;
+        border-radius: 18px;
+    }
+
+    .wakeup-card::before {
+        border-radius: 18px;
+    }
+
+    .wakeup-aurora-blob {
+        width: 250px !important;
+        height: 250px !important;
+    }
+}

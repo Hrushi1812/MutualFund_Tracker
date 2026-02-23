@@ -50,6 +50,10 @@ app.include_router(schemes.router)
 def home():
     return {"message": "NAV Estimator API is running 🚀 (Refactored)"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
