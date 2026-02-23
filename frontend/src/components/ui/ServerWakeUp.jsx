@@ -18,11 +18,10 @@ const SUCCESS_LINE = { text: 'Connected successfully!', isSuccess: true };
 
 // ── Tips that rotate while waiting ──
 const TIPS = [
-    'Our servers sleep after 15 min of inactivity to save resources.',
     'Your portfolio data is encrypted end-to-end.',
     'NAV data is synced live from AMFI during market hours.',
     'You can track XIRR, SIP step-ups, and P&L in real time.',
-    'Cold starts typically take 30–50 seconds on Render.',
+    'This usually takes under a minute — thanks for your patience!',
 ];
 
 // ── Floating Particles ──
@@ -200,7 +199,7 @@ const ServerWakeUp = ({ isVisible, onServerReady }) => {
 
                         <div className="wakeup-title">Waking Up Server</div>
                         <div className="wakeup-subtitle">
-                            Free-tier servers sleep after inactivity — hang tight!
+                            Server is warming up — hang tight!
                         </div>
 
                         {/* Status Lines */}
@@ -215,10 +214,10 @@ const ServerWakeUp = ({ isVisible, onServerReady }) => {
                                     <div className="wakeup-line" key={line.index}>
                                         <div
                                             className={`wakeup-indicator ${line.isSuccess
-                                                    ? 'wakeup-indicator--success-final'
-                                                    : isActive
-                                                        ? 'wakeup-indicator--active'
-                                                        : 'wakeup-indicator--done'
+                                                ? 'wakeup-indicator--success-final'
+                                                : isActive
+                                                    ? 'wakeup-indicator--active'
+                                                    : 'wakeup-indicator--done'
                                                 }`}
                                         >
                                             {(isDone || line.isSuccess) && (
@@ -227,12 +226,12 @@ const ServerWakeUp = ({ isVisible, onServerReady }) => {
                                         </div>
                                         <span
                                             className={`wakeup-line-text ${line.isSuccess
-                                                    ? 'wakeup-line-text--success'
-                                                    : isActive
-                                                        ? 'wakeup-line-text--active'
-                                                        : isDone
-                                                            ? 'wakeup-line-text--done'
-                                                            : ''
+                                                ? 'wakeup-line-text--success'
+                                                : isActive
+                                                    ? 'wakeup-line-text--active'
+                                                    : isDone
+                                                        ? 'wakeup-line-text--done'
+                                                        : ''
                                                 }`}
                                         >
                                             {line.text}
