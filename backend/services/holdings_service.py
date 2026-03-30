@@ -1081,7 +1081,7 @@ class HoldingsService:
                     sip_installments.append(inst)
                 
                 # Total invested = CAS amount + app-tracked (0 on initial upload)
-                final_invested_amount = manual_invested_amount + future_tracked_invested
+                final_invested_amount = round(manual_invested_amount + future_tracked_invested, 2)
 
         doc_data = {
             "fund_name": fund_name,
@@ -1285,7 +1285,7 @@ class HoldingsService:
                         has_pending_nav = True
             
             # Total invested = manual (CAS) + app-tracked (confirmed)
-            total_invested = manual_invested + total_tracked_invested
+            total_invested = round(manual_invested + total_tracked_invested, 2)
             
             holdings_collection.update_one(
                 {"_id": ObjectId(fund_id)},
@@ -1304,5 +1304,102 @@ class HoldingsService:
         except Exception as e:
             logger.error(f"Error handling SIP action: {e}")
             return {"error": str(e)}
+
+    @staticmethod
+    def resolve_pending_nav_installments(fund_id_str, user_id):
+        """
+        Retry NAV allocation for PAID installments that still have PENDING_NAV status.
+        
+        This handles the case where a user confirmed a SIP payment but the official
+        NAV wasn't published yet (e.g., confirmed on SIP day before NAV was released).
+        Called during calculate_pnl to auto-resolve pending allocations.
+        
+        Returns: True if any installments were resolved, False otherwise.
+        """
+        try:
+            doc = holdings_collection.find_one({"_id": ObjectId(fund_id_str), "user_id": user_id})
+            if not doc:
+                return False
+            
+            if doc.get("investment_type", "lumpsum") != "sip":
+                return False
+            
+            installments = doc.get("sip_installments", [])
+            scheme_code = doc.get("scheme_code")
+            sip_amount = float(doc.get("current_sip_amount") or doc.get("sip_amount", 0) or 0)
+            
+            if not scheme_code or not installments:
+                return False
+            
+            # Find PAID installments with PENDING_NAV
+            resolved_any = False
+            for inst in installments:
+                if inst.get("status") == "PAID" and inst.get("allocation_status") == "PENDING_NAV":
+                    date_str = inst.get("date")
+                    if not date_str:
+                        continue
+                    
+                    # Import locally to avoid circular deps
+                    from services.nav_service import nav_service
+                    
+                    # Try to get NAV for this date
+                    nav_res = nav_service.get_next_nav_after_date(scheme_code, date_str)
+                    if nav_res:
+                        nav = nav_res[0]
+                        nav_date_used = nav_res[1] if len(nav_res) > 1 else None
+                        
+                        try:
+                            sip_date = parse_date_from_str(date_str).date()
+                            used_date = parse_date_from_str(nav_date_used).date() if nav_date_used else None
+                            
+                            if used_date and used_date >= sip_date:
+                                # NAV is now available! Allocate units
+                                inst_amount = float(inst.get("amount", sip_amount))
+                                stamp_duty = round(inst_amount * 0.00005, 2)
+                                net_amount = inst_amount - stamp_duty
+                                units = net_amount / nav
+                                
+                                inst["units"] = units
+                                inst["nav"] = nav
+                                inst["nav_date"] = nav_date_used
+                                inst["allocation_status"] = "ESTIMATED"
+                                inst["is_estimated"] = True
+                                resolved_any = True
+                                logger.info(f"Resolved PENDING_NAV for {date_str}: NAV={nav}, units={units:.4f}")
+                        except Exception as e:
+                            logger.debug(f"Date parse error during NAV resolution for {date_str}: {e}")
+                            continue
+            
+            if resolved_any:
+                # Recalculate totals
+                manual_invested = float(doc.get("manual_invested_amount", 0) or 0)
+                total_tracked_invested = 0.0
+                total_future_units = 0.0
+                
+                for inst in installments:
+                    if inst["status"] == "PAID":
+                        total_tracked_invested += float(inst.get("amount", 0))
+                        units_val = inst.get("units")
+                        if units_val is not None:
+                            total_future_units += float(units_val)
+                
+                total_invested = round(manual_invested + total_tracked_invested, 2)
+                
+                holdings_collection.update_one(
+                    {"_id": ObjectId(fund_id_str)},
+                    {
+                        "$set": {
+                            "sip_installments": installments,
+                            "invested_amount": total_invested,
+                            "future_sip_units": total_future_units
+                        }
+                    }
+                )
+            
+            return resolved_any
+            
+        except Exception as e:
+            logger.error(f"Error resolving pending NAV installments: {e}")
+            return False
 
 holdings_service = HoldingsService()

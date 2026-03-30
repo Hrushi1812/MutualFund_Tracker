@@ -544,7 +544,8 @@ class NavService:
         investment_type = doc.get("investment_type", "lumpsum")
         if investment_type == "sip":
             synced = holdings_service.sync_sip_installments(fund_id, user_id)
-            if synced:
+            resolved = holdings_service.resolve_pending_nav_installments(fund_id, user_id)
+            if synced or resolved:
                 # Re-fetch document to get updated installments
                 doc = holdings_service.get_holdings(fund_id, user_id)
 
@@ -842,7 +843,7 @@ class NavService:
         return {
             "fund_id": fund_id,
             "fund_name": fund_name,
-            "invested_amount": investment,
+            "invested_amount": round(investment, 2),
             "manual_invested_amount": float(doc.get("manual_invested_amount", 0) or 0) if investment_type == "sip" else 0.0,
             "invested_date": input_date,
             "units": round(units, 4),

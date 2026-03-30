@@ -227,17 +227,17 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                                         {result.investment_type === 'sip' && result.manual_invested_amount > 0 ? (
                                             <>
                                                 <span className="text-[10px] sm:text-xs text-zinc-500 mb-1 font-medium tracking-wide">Total Invested</span>
-                                                <span className="text-base sm:text-lg font-bold text-white tracking-tight">₹{result.invested_amount}</span>
+                                                <span className="text-base sm:text-lg font-bold text-white tracking-tight">₹{Number(result.invested_amount).toFixed(2)}</span>
                                                 <div className="text-[9px] text-zinc-500 mt-1 space-y-0.5">
                                                     <div>Till Upload: ₹{result.manual_invested_amount}</div>
-                                                    <div>After Upload: ₹{result.invested_amount - result.manual_invested_amount}</div>
+                                                    <div>After Upload: ₹{(result.invested_amount - result.manual_invested_amount).toFixed(2)}</div>
                                                 </div>
                                                 <div className="text-[8px] text-zinc-600 italic mt-1">*Assuming past SIPs paid</div>
                                             </>
                                         ) : (
                                             <>
                                                 <span className="text-[10px] sm:text-xs text-zinc-500 mb-1 font-medium tracking-wide">Invested</span>
-                                                <span className="text-base sm:text-lg font-bold text-white tracking-tight">₹{result.invested_amount}</span>
+                                                <span className="text-base sm:text-lg font-bold text-white tracking-tight">₹{Number(result.invested_amount).toFixed(2)}</span>
                                             </>
                                         )}
                                     </div>
@@ -247,7 +247,7 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                                         <span className="text-[10px] sm:text-xs text-zinc-500 mb-1 font-medium tracking-wide">1D returns</span>
                                         <div className={`flex flex-col items-center leading-tight ${result.day_pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                             <span className="text-sm border-b border-transparent font-bold whitespace-nowrap">
-                                                {result.day_pnl >= 0 ? '+' : ''}₹{Math.abs(result.day_pnl)}
+                                                {result.day_pnl >= 0 ? '+' : ''}₹{Math.abs(result.day_pnl).toFixed(2)}
                                             </span>
                                             <span className="text-[10px] sm:text-xs font-medium opacity-80 whitespace-nowrap">
                                                 ({result.day_pnl >= 0 ? '+' : ''}{result.day_pnl_pct}%)
@@ -260,7 +260,7 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                                         <span className="text-[10px] sm:text-xs text-zinc-500 mb-1 font-medium tracking-wide">Total returns</span>
                                         <div className={`flex flex-col items-end leading-tight ${result.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                             <span className="text-sm font-bold whitespace-nowrap">
-                                                {result.pnl >= 0 ? '+' : ''}₹{Math.abs(result.pnl)}
+                                                {result.pnl >= 0 ? '+' : ''}₹{Math.abs(result.pnl).toFixed(2)}
                                             </span>
                                             <span className="text-[10px] sm:text-xs font-medium opacity-80 whitespace-nowrap">
                                                 ({result.pnl >= 0 ? '+' : ''}{result.pnl_pct}%)
@@ -273,12 +273,12 @@ const PortfolioAnalyzer = ({ fundId, onClose }) => {
                                 <div className="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-3">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-zinc-400">Current Value</span>
-                                        <span className="font-mono font-bold text-xl text-white">₹{result.current_value}</span>
+                                        <span className="font-mono font-bold text-xl text-white">₹{Number(result.current_value).toFixed(2)}</span>
                                     </div>
                                     <div className="h-px bg-white/5 w-full my-2"></div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-zinc-400">{isUsingDelayedData ? 'NAV (Est)' : 'Live NAV (Est)'}</span>
-                                        <span className="font-mono text-white">₹{result.current_nav}</span>
+                                        <span className="font-mono text-white">₹{Number(result.current_nav).toFixed(4)}</span>
                                     </div>
                                     {/* XIRR - Annualized Return for SIP */}
                                     {result.investment_type === 'sip' && result.xirr !== null && result.xirr !== undefined && (
