@@ -3,15 +3,38 @@ import api from '../api';
 
 export const AuthContext = createContext();
 
+// Check if a JWT token is expired by reading its `exp` claim
+const isTokenExpired = (token) => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (!payload.exp) return false; // No expiry claim → treat as valid
+        return Date.now() >= payload.exp * 1000; // exp is in seconds
+    } catch {
+        return true; // Can't decode → treat as expired
+    }
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    // Track whether the backend server is confirmed reachable.
+    // Starts as false when a stored token exists (returning user), true otherwise.
+    const [serverAwake, setServerAwake] = useState(!localStorage.getItem('token'));
 
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
         if (storedToken) {
+            // Auto-logout if the token has expired (e.g. user returns after a long time)
+            if (isTokenExpired(storedToken)) {
+                localStorage.removeItem('token');
+                setToken(null);
+                setServerAwake(true); // No need to wake server for a logged-out user
+                setIsLoading(false);
+                return;
+            }
+
             setToken(storedToken);
             setIsAuthenticated(true);
             try {
@@ -27,6 +50,7 @@ export const AuthProvider = ({ children }) => {
         setIsLoading(false);
     }, []);
 
+
     const login = async (username, password) => {
         const formData = new FormData();
         formData.append('username', username);
@@ -39,6 +63,7 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('token', access_token);
             setToken(access_token);
             setIsAuthenticated(true);
+            setServerAwake(true); // Server responded → it's awake
             setUser({ username }); // We could decode token for more info
             return { success: true };
         } catch (error) {
@@ -79,6 +104,7 @@ export const AuthProvider = ({ children }) => {
         setToken(null);
         setUser(null);
         setIsAuthenticated(false);
+        setServerAwake(true); // Reset so login page doesn't show wake-up
     };
 
     const forgotPassword = async (email) => {
@@ -122,6 +148,8 @@ export const AuthProvider = ({ children }) => {
             token,
             isAuthenticated,
             isLoading,
+            serverAwake,
+            setServerAwake,
             login,
             register,
             logout,
