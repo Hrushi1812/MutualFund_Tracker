@@ -25,6 +25,7 @@ python-multipart
 pytz
 requests
 six
+slowapi
 soupsieve
 starlette
 typing_extensions

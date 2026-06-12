@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from services.holdings_service import holdings_service, validate_excel_against_scheme
 from services.nav_service import nav_service
 from services.cas_service import cas_service
 from services.auth_service import AuthService
 from routes.auth import get_current_user
+from core.limiter import limiter
 
 router = APIRouter(tags=["Holdings"])
 
@@ -300,7 +301,9 @@ def update_holdings(
 # ============================================================
 
 @router.post("/parse-cas/")
+@limiter.limit("2/minute")
 def parse_cas(
+    request: Request,
     file: UploadFile = File(...),
     password: str = Form(...),
     scheme_filter: str = Form(None),  # Optional: filter by scheme name
@@ -361,7 +364,9 @@ def parse_cas(
 
 
 @router.post("/parse-cas/transactions/")
+@limiter.limit("2/minute")
 def get_cas_transactions(
+    request: Request,
     file: UploadFile = File(...),
     password: str = Form(...),
     scheme_name: str = Form(None),

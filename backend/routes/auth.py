@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 import os
@@ -7,6 +7,7 @@ from models.schemas import UserCreate, Token, UserLogin, ForgotPasswordRequest, 
 from services.auth_service import auth_service, oauth2_scheme, settings
 from services.email_service import email_service
 from jose import JWTError, jwt
+from core.limiter import limiter
 from core.logging import get_logger
 
 logger = get_logger("AuthRoutes")
@@ -17,12 +18,14 @@ router = APIRouter(tags=["Authentication"])
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 @router.post("/register", response_model=dict)
-def register(user: UserCreate):
+@limiter.limit("5/minute")
+def register(request: Request, user: UserCreate):
     auth_service.create_user(user)
     return {"message": "User created successfully"}
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+@limiter.limit("5/minute")
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     user = auth_service.authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -46,6 +49,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
+        # Only access tokens may authenticate API calls. Rejects password-reset
+        # tokens (and any other purpose-built JWT) presented as a Bearer token.
+        if payload.get("type") != "access":
+            raise credentials_exception
     except JWTError:
         raise credentials_exception
     
@@ -55,30 +62,32 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 @router.post("/forgot-password", response_model=dict)
-def forgot_password(request: ForgotPasswordRequest):
+@limiter.limit("3/minute")
+def forgot_password(request: Request, payload: ForgotPasswordRequest):
     """
     Request a password reset link.
     Uses email_service to send emails (Mailgun in prod, console in dev).
     """
-    user = auth_service.get_user_by_email(request.email)
-    
+    user = auth_service.get_user_by_email(payload.email)
+
     # Always return success to prevent email enumeration attacks
     if not user:
-        logger.info(f"Password reset requested for unknown email: {request.email}")
+        logger.info(f"Password reset requested for unknown email: {payload.email}")
         return {"message": "If an account with that email exists, a reset link has been sent."}
-    
+
     # Generate reset token and URL
-    reset_token = auth_service.create_password_reset_token(request.email)
+    reset_token = auth_service.create_password_reset_token(payload.email)
     reset_url = f"{FRONTEND_URL}/reset-password?token={reset_token}"
-    
+
     # Send email via email service (handles both dev and prod)
-    email_service.send_password_reset_email(request.email, reset_url)
-    
+    email_service.send_password_reset_email(payload.email, reset_url)
+
     return {"message": "If an account with that email exists, a reset link has been sent."}
 
 @router.post("/reset-password", response_model=dict)
-def reset_password(request: ResetPasswordRequest):
+@limiter.limit("5/minute")
+def reset_password(request: Request, payload: ResetPasswordRequest):
     """Reset password using a valid reset token."""
-    auth_service.reset_password(request.token, request.new_password)
+    auth_service.reset_password(payload.token, payload.new_password)
     return {"message": "Password reset successfully. You can now log in with your new password."}
 

@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from routes import auth, holdings, portfolio, fyers, schemes
 from db import client, ensure_indexes
+from core.limiter import limiter
 from core.logging import setup_logging, get_logger
 from core.config import settings
 
@@ -11,6 +14,10 @@ setup_logging()
 logger = get_logger("app")
 
 app = FastAPI(title="Mutual Fund NAV Estimator API")
+
+# Rate limiting (slowapi)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # 2. Global Exception Handler
 @app.exception_handler(Exception)
