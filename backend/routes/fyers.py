@@ -1,9 +1,10 @@
 """
 Fyers API Routes - OAuth callback and token management
 """
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from services.fyers_service import fyers_service
+from routes.auth import get_current_user
 from core.logging import get_logger
 
 logger = get_logger("FyersRoutes")
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/api/fyers", tags=["fyers"])
 
 
 @router.get("/auth-url")
-def get_auth_url():
+def get_auth_url(current_user: dict = Depends(get_current_user)):
     """
     Get the Fyers OAuth authorization URL.
     User should visit this URL in browser to authorize.
@@ -79,7 +80,7 @@ def fyers_callback(
 
 
 @router.get("/status")
-def get_fyers_status(validate: bool = False):
+def get_fyers_status(validate: bool = False, current_user: dict = Depends(get_current_user)):
     """
     Check if Fyers API is authenticated.
     
@@ -99,7 +100,6 @@ def get_fyers_status(validate: bool = False):
     return {
         "authenticated": is_auth,
         "configured": bool(fyers_service.app_id and fyers_service.secret_key),
-        "app_id": fyers_service.app_id,
         "token_expiry": fyers_service._token_expiry.isoformat() if fyers_service._token_expiry else None,
         "live_validated": live_valid,
         "message": "Ready" if is_auth else "Not authenticated. Connect Fyers to get live stock data."
@@ -107,7 +107,7 @@ def get_fyers_status(validate: bool = False):
 
 
 @router.get("/disconnect")
-def disconnect_fyers():
+def disconnect_fyers(current_user: dict = Depends(get_current_user)):
     """
     Clear the Fyers token (logout).
     User can still use the app with delayed/cached data.
@@ -116,17 +116,8 @@ def disconnect_fyers():
     return {"success": True, "message": "Fyers disconnected. Live data unavailable."}
 
 
-@router.post("/set-token")
-def set_token_manually(access_token: str):
-    """
-    Manually set an access token (for advanced users who generate token externally).
-    """
-    fyers_service.set_token_directly(access_token)
-    return {"success": True, "message": "Token set successfully"}
-
-
 @router.get("/test-quote")
-def test_quote(symbol: str = "RELIANCE"):
+def test_quote(symbol: str = "RELIANCE", current_user: dict = Depends(get_current_user)):
     """Test fetching a live quote."""
     if not fyers_service.is_authenticated():
         raise HTTPException(status_code=401, detail="Fyers not authenticated")

@@ -123,16 +123,6 @@ class FyersService:
             logger.error(f"Token generation error: {e}")
             return False
 
-    def set_token_directly(self, access_token: str):
-        """
-        Manually set an access token (useful for testing or manual token generation).
-        """
-        self._access_token = access_token
-        self._token_expiry = datetime.now() + timedelta(hours=23)
-        self._save_token()
-        self._init_fyers_model()
-        logger.info("Fyers token set directly")
-
     def is_authenticated(self) -> bool:
         """Check if we have a valid (non-expired) cached token."""
         if not self._access_token or not self._token_expiry:
