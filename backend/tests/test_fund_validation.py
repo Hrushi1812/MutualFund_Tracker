@@ -14,13 +14,12 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 class TestFundValidation(unittest.TestCase):
     
-    @patch('services.holdings_service.load_nse_csv')
-    @patch('services.holdings_service.isin_to_symbol_nse')
+    @patch('services.holdings_service.load_nse_isin_map')
     @patch('services.holdings_service.get_scheme_candidates')
     @patch('services.holdings_service.pd.read_excel')
     @patch('services.holdings_service.holdings_collection') # Mock DB to be safe
     @patch('services.holdings_service.users_collection')
-    def test_invalid_fund_name_returns_error(self, mock_users, mock_holdings_col, mock_read_excel, mock_get_candidates, mock_isin, mock_load_nse):
+    def test_invalid_fund_name_returns_error(self, mock_users, mock_holdings_col, mock_read_excel, mock_get_candidates, mock_load_nse):
         
         # Import inside to make sure mocks are active if needed (though patch handles it usually for validation)
         from services.holdings_service import HoldingsService
@@ -39,8 +38,7 @@ class TestFundValidation(unittest.TestCase):
         mock_read_excel.return_value = df_mock
         
         # 2. Mock NSE Utils
-        mock_load_nse.return_value = []
-        mock_isin.return_value = "TESTSYMBOL" # So it resolves tickers
+        mock_load_nse.return_value = {'INF209KA12Z1': "TESTSYMBOL"} # So it resolves tickers
         
         # 3. Mock Candidates -> EMPTY LIST (The Test Case)
         mock_get_candidates.return_value = []

@@ -86,36 +86,51 @@ def load_fyers_bse_isin_map(force: bool = False) -> dict:
         _FYERS_BSE_ISIN_MAP_LOADED_AT = now
         return _FYERS_BSE_ISIN_MAP
 
-def load_nse_csv():
-    """Downloads and caches the NSE Equity Master List (CSV)."""
-    url = NSE_CSV_URL
+_NSE_ISIN_MAP = None  # type: Optional[dict]
+_NSE_ISIN_MAP_LOADED_AT = 0.0
+_NSE_ISIN_MAP_TTL_SECONDS = 24 * 60 * 60
+
+
+def load_nse_isin_map(force: bool = False) -> dict:
+    """Downloads the NSE Equity Master List and caches an ISIN -> Symbol dict.
+
+    Same 24h-TTL pattern as the FYERS BSE map above. Replaces the previous
+    per-upload CSV download + per-ISIN linear table scan. On download failure
+    the stale cache (if any) is served and the next call retries.
+    """
+    global _NSE_ISIN_MAP, _NSE_ISIN_MAP_LOADED_AT
+
+    now = time.time()
+    if (
+        not force
+        and _NSE_ISIN_MAP is not None
+        and (now - _NSE_ISIN_MAP_LOADED_AT) < _NSE_ISIN_MAP_TTL_SECONDS
+    ):
+        return _NSE_ISIN_MAP
+
     try:
-        r = session.get(url, timeout=20)
-        f = StringIO(r.text)
-        return list(csv.DictReader(f))
+        r = session.get(NSE_CSV_URL, timeout=20)
+        rows = list(csv.DictReader(StringIO(r.text)))
+        mapping: dict = {}
+        if rows:
+            headers = rows[0].keys()
+            isin_col = next((col for col in headers if "isin" in col.lower().replace(" ", "")), None)
+            symbol_col = next((col for col in headers if col.lower().strip() in ["symbol", "tradingsymbol", "sc_symbol"]), None)
+            if not symbol_col:  # Fallback
+                symbol_col = next((col for col in headers if "symbol" in col.lower()), None)
+            if isin_col and symbol_col:
+                for row in rows:
+                    isin = (row.get(isin_col) or "").strip()
+                    if isin:
+                        mapping[isin] = row.get(symbol_col)
+        _NSE_ISIN_MAP = mapping
+        _NSE_ISIN_MAP_LOADED_AT = now
     except Exception as e:
         logger.error(f"Error downloading NSE CSV: {e}")
-        return []
+        # Serve stale cache if we have one; otherwise an empty map.
+        # LOADED_AT is left untouched so the next call retries the download.
 
-def isin_to_symbol_nse(isin, nse_table=None):
-    """Resolves ISIN to NSE Symbol."""
-    if not nse_table:
-        nse_table = load_nse_csv()
-    if not nse_table: return None
-    
-    headers = nse_table[0].keys()
-    isin_col = next((col for col in headers if "isin" in col.lower().replace(" ", "")), None)
-    symbol_col = next((col for col in headers if col.lower().strip() in ["symbol", "tradingsymbol", "sc_symbol"]), None)
-    
-    if not symbol_col: # Fallback
-         symbol_col = next((col for col in headers if "symbol" in col.lower()), None)
-
-    if not isin_col or not symbol_col: return None
-
-    for row in nse_table:
-        if row.get(isin_col, "").strip() == isin:
-            return row.get(symbol_col)
-    return None
+    return _NSE_ISIN_MAP or {}
 
 def search_scheme_code(query):
     # DEPRECATED: Use get_scheme_candidates logic instead
@@ -725,18 +740,18 @@ class HoldingsService:
             df["Weight"] = df["Weight"].apply(clean_weight)
             
             # 6. Resolve tickers
-            nse_source = load_nse_csv()
+            nse_isin_map = load_nse_isin_map()
             holdings_list = []
             bse_isin_map = None
-            
+
             for _, row in df.iterrows():
                 isin = row["ISIN"]
                 name = row.get("Name", "Unknown")
                 weight = float(row["Weight"])
                 if weight <= 0:
                     continue
-                
-                ticker = isin_to_symbol_nse(isin, nse_table=nse_source)
+
+                ticker = nse_isin_map.get(isin)
                 if ticker:
                     holdings_list.append({"ISIN": isin, "Name": name, "Symbol": ticker, "Weight": weight})
                 else:
@@ -921,7 +936,7 @@ class HoldingsService:
         df["Weight"] = df["Weight"].apply(clean_weight)
 
         # 5. Resolve Tickers (NSE first, then FYERS BSE fallback)
-        nse_source = load_nse_csv()
+        nse_isin_map = load_nse_isin_map()
         holdings_list = []
         unresolved = []
         zero_weight_skipped = []
@@ -937,8 +952,8 @@ class HoldingsService:
             if weight <= 0:
                 zero_weight_skipped.append(f"{name} ({isin})")
                 continue
-            
-            ticker = isin_to_symbol_nse(isin, nse_table=nse_source)
+
+            ticker = nse_isin_map.get(isin)
             if ticker:
                 holdings_list.append({"ISIN": isin, "Name": name, "Symbol": ticker, "Weight": weight})
                 resolved_nse += 1
