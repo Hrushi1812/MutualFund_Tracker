@@ -174,14 +174,13 @@ def _bisection_xirr(
     
     npv_low = _xnpv(low, cash_flows, base_date)
     npv_high = _xnpv(high, cash_flows, base_date)
-    
+
     # Check if solution exists in range
     if npv_low * npv_high > 0:
-        # Same sign - no root in interval
-        # Return approximate based on which is closer to zero
-        if abs(npv_low) < abs(npv_high):
-            return low * 100
-        return high * 100
+        # Same sign - no root in [-99%, 1000%]. There is no meaningful XIRR
+        # to report; returning an interval endpoint would show the user a
+        # fabricated -99% or +1000% annualized return.
+        return None
     
     for _ in range(max_iterations):
         mid = (low + high) / 2
@@ -202,31 +201,6 @@ def _bisection_xirr(
 
 # Alias for internal use
 parse_date = _parse_date
-
-
-# Stamp duty rate for mutual funds (0.005% = 0.00005)
-# SEBI-mandated, applies to every MF purchase
-STAMP_DUTY_RATE = 0.00005
-
-
-def _apply_stamp_duty(amount: float) -> float:
-    """
-    Calculate total investment amount including stamp duty.
-    Stamp duty on MF purchases is 0.005% of the transaction value.
-    
-    Uses standard rounding to nearest paisa (as shown in CAS):
-    - ₹100 × 0.005% = ₹0.005 → rounds to ₹0.00 (no stamp duty)
-    - ₹200 × 0.005% = ₹0.01 → stays ₹0.01
-    
-    Examples:
-        ₹100.00 → ₹100.00 (stamp duty ₹0.00)
-        ₹199.99 → ₹200.00 (stamp duty ₹0.01)
-        ₹200.00 → ₹200.01 (stamp duty ₹0.01)
-    """
-    stamp_duty = amount * STAMP_DUTY_RATE
-    # Standard rounding to nearest paisa (0.01)
-    stamp_duty = round(stamp_duty, 2)
-    return round(amount + stamp_duty, 2)
 
 
 # Convenience function for SIP calculations
@@ -281,9 +255,15 @@ def calculate_sip_xirr(
     
     if not cash_flows:
         return None  # No investments to calculate
-    
+
+    # Annualizing a holding younger than ~30 days produces wild, meaningless
+    # numbers (a 1% week becomes ~68% "annualized"); suppress XIRR until then.
+    earliest = min(d for d, _ in cash_flows)
+    if (current_date - earliest).days < 30:
+        return None
+
     # Add current value as positive cash flow (return)
     cash_flows.append((current_date, current_value))
-    
+
     return calculate_xirr(cash_flows)
 
