@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from db import users_collection
@@ -80,7 +81,13 @@ class AuthService:
             created_at=datetime.utcnow()
         )
         
-        users_collection.insert_one(user_doc.dict())
+        try:
+            users_collection.insert_one(user_doc.dict())
+        except DuplicateKeyError:
+            # Race-proof backstop behind the pre-checks above: the unique
+            # indexes on username/email reject concurrent duplicate registrations.
+            logger.warning(f"Registration race: duplicate insert for '{user.username}'.")
+            raise HTTPException(status_code=400, detail="Username or email already exists")
         logger.info(f"New user registered: {user.username}")
         return user_doc.dict()
 
