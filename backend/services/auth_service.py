@@ -2,7 +2,8 @@ import hashlib
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException, status
@@ -181,7 +182,7 @@ class AuthService:
             logger.info(f"Password reset successful for user: {user['username']}")
             return True
 
-        except JWTError:
+        except PyJWTError:
             logger.warning("Password reset failed: Token expired or invalid.")
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 

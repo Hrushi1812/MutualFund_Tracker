@@ -44,7 +44,7 @@ A mutual fund portfolio tracking application that estimates intraday NAV movemen
 | **Pydantic** | Data validation |
 | **yfinance** | Yahoo Finance API for live prices |
 | **Fyers API v3** | Broker integration |
-| **JWT (python-jose)** | Authentication tokens |
+| **JWT (PyJWT)** | Authentication tokens |
 | **Argon2** | Secure password hashing |
 | **Uvicorn** | ASGI server |
 
