@@ -122,7 +122,7 @@ class NavService:
         return None
 
     @staticmethod
-    def _get_scheme_history(scheme_code, retries=1):
+    def _get_scheme_history(scheme_code, retries=2):
         """
         Returns (nav_data, meta) for a scheme from mfapi.in, where nav_data is
         the full NAV history list (newest first). Cached for 15 minutes so the
@@ -130,8 +130,9 @@ class NavService:
         NAV, per-installment NAVs) hit the network only once per scheme.
 
         mfapi.in is slow/overloaded around midnight IST (AMFI publishes the
-        day's NAVs then), so each request uses a 10s timeout and is retried once
-        on a transient failure. Returns ([], None) when every attempt fails;
+        day's NAVs then), so each request uses a 10s timeout and is retried up
+        to twice on a transient failure. Returns ([], None) when every attempt
+        fails;
         failures are not cached, so the next call retries and the P&L decision
         tree falls back to estimating the NAV from holdings in the meantime.
         """
@@ -742,7 +743,7 @@ class NavService:
                                 last_updated_str = latest["date"]
                                 note = f"Official NAV ({last_updated_str}) - Stale"
                             else:
-                                return {"error": "No NAV data available."}
+                                return {"error": "AMFI is not giving us data right now. Please try again after some time."}
 
         # --- 2. Historical NAV (Purchase Price) ---
         investment_type = doc.get("investment_type", "lumpsum")
