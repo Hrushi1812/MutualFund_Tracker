@@ -122,7 +122,7 @@ MutualFund_Tracker/
    ```env
    MONGO_URI=mongodb://localhost:27017
    MONGO_DB=mutual_funds
-   JWT_SECRET=your-secret-key
+   SECRET_KEY=your-secret-key
    FYERS_APP_ID=your-fyers-app-id
    FYERS_SECRET_KEY=your-fyers-secret
    ```
