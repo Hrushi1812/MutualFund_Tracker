@@ -122,32 +122,49 @@ class NavService:
         return None
 
     @staticmethod
-    def _get_scheme_history(scheme_code):
+    def _get_scheme_history(scheme_code, retries=1):
         """
         Returns (nav_data, meta) for a scheme from mfapi.in, where nav_data is
         the full NAV history list (newest first). Cached for 15 minutes so the
         multiple lookups within a single P&L calculation (latest NAV, purchase
         NAV, per-installment NAVs) hit the network only once per scheme.
-        Returns ([], None) on failure; failures are not cached so transient
-        errors retry on the next call.
+
+        mfapi.in is slow/overloaded around midnight IST (AMFI publishes the
+        day's NAVs then), so each request uses a 10s timeout and is retried once
+        on a transient failure. Returns ([], None) when every attempt fails;
+        failures are not cached, so the next call retries and the P&L decision
+        tree falls back to estimating the NAV from holdings in the meantime.
         """
         key = str(scheme_code)
         with _NAV_HISTORY_LOCK:
             cached = _NAV_HISTORY_CACHE.get(key)
         if cached is not None:
             return cached
-        try:
-            url = f"https://api.mfapi.in/mf/{scheme_code}"
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "SUCCESS":
-                    result = (data.get("data") or [], data.get("meta"))
-                    with _NAV_HISTORY_LOCK:
-                        _NAV_HISTORY_CACHE[key] = result
-                    return result
-        except Exception as e:
-            logger.error(f"Error fetching NAV history for {scheme_code}: {e}")
+
+        url = f"https://api.mfapi.in/mf/{scheme_code}"
+        for attempt in range(retries + 1):
+            try:
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "SUCCESS":
+                        result = (data.get("data") or [], data.get("meta"))
+                        with _NAV_HISTORY_LOCK:
+                            _NAV_HISTORY_CACHE[key] = result
+                        return result
+                    # Valid HTTP response but API reports no data — retrying won't help
+                    logger.warning(f"NAV history for {scheme_code}: API status={data.get('status')}")
+                    return ([], None)
+                logger.warning(
+                    f"NAV history for {scheme_code} returned HTTP {response.status_code} "
+                    f"(attempt {attempt + 1}/{retries + 1})"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Error fetching NAV history for {scheme_code} "
+                    f"(attempt {attempt + 1}/{retries + 1}): {e}"
+                )
+        logger.error(f"Could not fetch NAV history for {scheme_code} after {retries + 1} attempts")
         return ([], None)
 
     @staticmethod
