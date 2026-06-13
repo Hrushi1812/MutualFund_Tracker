@@ -6,7 +6,8 @@ import os
 from models.schemas import UserCreate, Token, UserLogin, ForgotPasswordRequest, ResetPasswordRequest
 from services.auth_service import auth_service, oauth2_scheme, settings
 from services.email_service import email_service
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from core.limiter import limiter
 from core.logging import get_logger
 
@@ -53,7 +54,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         # tokens (and any other purpose-built JWT) presented as a Bearer token.
         if payload.get("type") != "access":
             raise credentials_exception
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
     
     user = auth_service.get_user(username)

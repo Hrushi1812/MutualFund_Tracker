@@ -1,42 +1,45 @@
-anyio
-appdirs
-cachetools
-beautifulsoup4
-certifi
-charset-normalizer
-click
-dnspython
-et_xmlfile
-fastapi>=0.109.0
-frozendict
-h11
-html5lib
-idna
-lxml
-multitasking
-numpy
-openpyxl
-pandas
-pydantic>=2.5.0
-pymongo
-python-dateutil
-python-dotenv
-python-multipart
-pytz
-requests
-six
-slowapi
-soupsieve
-starlette
-typing_extensions
-tzdata
-urllib3
-uvicorn>=0.27.0
-webencodings
-yfinance
-fyers-apiv3
-pydantic[email]
-passlib[argon2]
-python-jose[cryptography]
-casparser[mupdf]
-pandas_market_calendars
+# Pinned to the exact versions the app is verified to run on.
+# Only direct dependencies are listed; pip resolves their transitives.
+# To upgrade: bump a pin here, reinstall, and re-test before committing.
+
+# --- Web framework / ASGI server ---
+fastapi==0.127.0
+uvicorn==0.40.0
+python-multipart==0.0.21
+
+# --- Data validation ---
+pydantic[email]==2.12.5
+
+# --- Auth & security ---
+PyJWT==2.13.0
+passlib[argon2]==1.7.4
+slowapi==0.1.9
+
+# --- Database (dnspython required for mongodb+srv:// Atlas URIs) ---
+pymongo==4.15.5
+dnspython==2.8.0
+certifi==2025.11.12
+
+# --- Config ---
+python-dotenv==1.2.1
+
+# --- HTTP ---
+requests==2.31.0
+
+# --- Data & Excel parsing ---
+pandas==2.3.3
+numpy==2.4.0
+openpyxl==3.1.5
+
+# --- Market data sources ---
+yfinance==1.0
+fyers-apiv3==3.1.7
+pandas_market_calendars==5.4.0
+
+# --- CAS (Consolidated Account Statement) PDF parsing ---
+casparser[mupdf]==0.8.1
+
+# --- Dates & caching ---
+python-dateutil==2.9.0.post0
+pytz==2025.2
+cachetools==7.1.4
