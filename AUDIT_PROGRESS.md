@@ -4,8 +4,8 @@ Issue-by-issue checklist from `AUDIT_REPORT.md` (section numbers match). Check i
 
 **Status legend:** `[x]` fixed (branch noted) · `[ ]` open · ~~struck~~ = closed without fix (decision noted)
 
-**Branches awaiting merge (stacked — merge in this order, or merge `auth-hardening` alone to get all six):**
-1. `security-hotfixes` → 2. `unblock-event-loop` → 3. `db-indexes` → 4. `fix-xirr-fallback` → 5. `external-data-caching` → 6. `auth-hardening`
+**Branches awaiting merge (stacked — merge in this order, or merge `pin-dependencies` alone to get all seven):**
+1. `security-hotfixes` → 2. `unblock-event-loop` → 3. `db-indexes` → 4. `fix-xirr-fallback` → 5. `external-data-caching` → 6. `auth-hardening` → 7. `pin-dependencies`
 
 ---
 
@@ -37,16 +37,16 @@ Issue-by-issue checklist from `AUDIT_REPORT.md` (section numbers match). Check i
 ## Section 2 — Dependencies
 
 ### High
-- [ ] 2.A Backend `requirements.txt` fully unpinned, no lockfile — adopt pip-tools/uv (`requirements.in` → compiled pins). *Deferred from this round: needs a clean resolve+test pass.*
-- [ ] 2.B Replace unmaintained `python-jose` with `PyJWT` (or pin ≥3.4.0 explicitly)
-- [ ] 2.C `yfinance` unpinned and scraping-based — pin and treat as best-effort
+- [x] 2.A Backend `requirements.txt` fully unpinned, no lockfile — **rewritten as curated direct deps, each pinned to the verified-working version, on `pin-dependencies`** *(future: pip-tools/uv for a full transitive lock)*
+- [x] 2.B Replace unmaintained `python-jose` with `PyJWT` — **swapped on `pin-dependencies`; verified encode/decode round-trip + tampered-token rejection**
+- [x] 2.C `yfinance` unpinned and scraping-based — **pinned (==1.0) on `pin-dependencies`; still best-effort**
 
 ### Medium
-- [ ] 2.D Migrate off unmaintained `passlib` to `argon2-cffi` directly (breaks on Python ≥3.13)
-- [ ] 2.E Pin `casparser`, `pandas`, `numpy`, `fyers-apiv3`, `pymongo`
+- [ ] 2.D Migrate off unmaintained `passlib` to `argon2-cffi` directly (breaks on Python ≥3.13) — *still using passlib[argon2], now pinned*
+- [x] 2.E Pin `casparser`, `pandas`, `numpy`, `fyers-apiv3`, `pymongo` — **all pinned on `pin-dependencies`**
 
 ### Low
-- [ ] 2.F Remove ~18 transitive deps listed as direct in requirements.txt
+- [x] 2.F Remove ~18 transitive deps listed as direct in requirements.txt — **pruned on `pin-dependencies`**
 - [ ] 2.G Lazy-load the three.js landing element so dashboard users don't download 3D libs
 
 ---
@@ -177,8 +177,10 @@ Issue-by-issue checklist from `AUDIT_REPORT.md` (section numbers match). Check i
 | Severity | Total | Fixed | Closed (decision) | Open |
 |---|---|---|---|---|
 | Critical | 3 | 2 | 1 (3.2) | 0 |
-| High | 13 | 7 | 1 (9.1) | 5 (2.A-C, 5.1-2/8.1 deferred) |
-| Medium | 24 | 1 | 0 | 23 |
-| Low | 13 | 1 | 0 | 12 |
+| High | 19 | 11 | 1 (9.1) | 7 (5.1–5.5 testing + 6.1b + 8.1 CI — all deferred/future) |
+| Medium | 24 | 4 | 0 | 20 |
+| Low | 13 | 2 | 0 | 11 |
 
-*Fixed counts include items sitting on the six unmerged branches listed at the top. After merging, deploy needs `SECRET_KEY` set in the Render environment (it already is, if the app runs today) — the app now refuses to boot without it. All users get logged out once on deploy (token format change); they just log in again.*
+*Fixed counts include items sitting on the seven unmerged branches listed at the top. All Critical findings are resolved (2 fixed, 1 accepted by decision). Remaining open High items are the deferred Section 5 (testing) and 8.1 (CI), plus 6.1b (fund-identity upsert).*
+
+*Deploy notes: the app now refuses to boot without `SECRET_KEY` set in the Render environment (it already is, if the app runs today). All users get logged out once on deploy (access tokens now carry a `type` claim); they just log in again. `requirements.txt` is now fully pinned — a clean `pip install -r requirements.txt` reproduces the verified set.*
