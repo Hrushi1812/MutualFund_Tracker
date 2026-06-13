@@ -1,6 +1,9 @@
+import hashlib
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException, status
@@ -31,8 +34,10 @@ class AuthService:
             expire = datetime.utcnow() + expires_delta
         else:
             expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        
-        to_encode.update({"exp": expire})
+
+        # "type" lets get_current_user reject non-access JWTs (e.g. password
+        # reset tokens) presented as Bearer tokens.
+        to_encode.update({"exp": expire, "type": "access"})
         encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
         return encoded_jwt
 
@@ -110,47 +115,74 @@ class AuthService:
 
     @staticmethod
     def create_password_reset_token(email: str) -> str:
-        """Generate a JWT token for password reset with 15-min expiry."""
+        """
+        Generate a single-use JWT token for password reset with 15-min expiry.
+
+        A random jti is embedded in the token and its hash stored on the user
+        document; reset_password consumes it, so the link works exactly once.
+        Requesting a new reset overwrites the stored hash, invalidating any
+        older outstanding links.
+        """
+        jti = uuid.uuid4().hex
         expire = datetime.utcnow() + timedelta(minutes=15)
         to_encode = {
             "sub": email,
             "purpose": "password_reset",
+            "jti": jti,
             "exp": expire
         }
+        users_collection.update_one(
+            {"email": email},
+            {"$set": {
+                "reset_token_hash": hashlib.sha256(jti.encode()).hexdigest(),
+                "reset_token_created_at": datetime.utcnow()
+            }}
+        )
         encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
         return encoded_jwt
 
     @staticmethod
     def reset_password(token: str, new_password: str) -> bool:
-        """Validate reset token and update user password."""
+        """Validate reset token (single-use) and update user password."""
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             email = payload.get("sub")
             purpose = payload.get("purpose")
-            
-            if purpose != "password_reset" or not email:
-                logger.warning("Password reset failed: Invalid token purpose or missing email.")
+            jti = payload.get("jti")
+
+            if purpose != "password_reset" or not email or not jti:
+                logger.warning("Password reset failed: Invalid token purpose or missing claims.")
                 raise HTTPException(status_code=400, detail="Invalid reset token")
-            
+
             user = AuthService.get_user_by_email(email)
             if not user:
                 logger.warning(f"Password reset failed: User with email '{email}' not found.")
                 raise HTTPException(status_code=404, detail="User not found")
-            
+
+            # Single-use check: the token's jti must match the stored hash.
+            # Used tokens (hash unset below) and superseded tokens both fail here.
+            stored_hash = user.get("reset_token_hash")
+            if not stored_hash or hashlib.sha256(jti.encode()).hexdigest() != stored_hash:
+                logger.warning(f"Password reset failed: Token already used or superseded for '{user['username']}'.")
+                raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
             # Validate new password strength
             AuthService.validate_password_strength(new_password)
-            
-            # Update password in database
+
+            # Update password and consume the token in one write
             hashed_password = AuthService.get_password_hash(new_password)
             users_collection.update_one(
                 {"email": email},
-                {"$set": {"hashed_password": hashed_password}}
+                {
+                    "$set": {"hashed_password": hashed_password},
+                    "$unset": {"reset_token_hash": "", "reset_token_created_at": ""}
+                }
             )
-            
+
             logger.info(f"Password reset successful for user: {user['username']}")
             return True
-            
-        except JWTError:
+
+        except PyJWTError:
             logger.warning("Password reset failed: Token expired or invalid.")
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
