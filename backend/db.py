@@ -26,3 +26,10 @@ except (InvalidURI, ConfigurationError) as e:
 db = client[settings.MONGO_DB]
 holdings_collection = db["holdings"]
 users_collection = db["users"]
+
+
+def ensure_indexes():
+    """Create required indexes. Idempotent; called once at app startup."""
+    users_collection.create_index("username", unique=True)
+    users_collection.create_index("email", unique=True)
+    holdings_collection.create_index("user_id")

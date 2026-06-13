@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from routes import auth, holdings, portfolio, fyers, schemes
-from db import client
+from db import client, ensure_indexes
 from core.logging import setup_logging, get_logger
 from core.config import settings
 
@@ -38,6 +38,13 @@ def startup_db_client():
         logger.info("Connected to MongoDB successfully!")
     except Exception as e:
         logger.critical(f"MongoDB Startup Error: {e}")
+    try:
+        ensure_indexes()
+        logger.info("MongoDB indexes ensured.")
+    except Exception as e:
+        # Unique index creation fails if duplicate users already exist;
+        # keep serving but log loudly so it gets fixed.
+        logger.critical(f"MongoDB index creation failed: {e}")
 
 # Routes
 app.include_router(auth.router)
