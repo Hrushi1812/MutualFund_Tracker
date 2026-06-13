@@ -21,7 +21,7 @@ def remove_fund(fund_id: str, current_user: dict = Depends(get_current_user)):
     return {"error": "Fund not found"}, 404
 
 @router.post("/upload-holdings/")
-async def upload(
+def upload(
     fund_name: str = Form(..., min_length=1),
     scheme_code: str = Form(None),
     scheme_name: str = Form(None),  # Official scheme name for validation
@@ -264,7 +264,7 @@ def sip_action(
 # ============================================================
 
 @router.patch("/funds/{fund_id}/holdings")
-async def update_holdings(
+def update_holdings(
     fund_id: str,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
@@ -300,7 +300,7 @@ async def update_holdings(
 # ============================================================
 
 @router.post("/parse-cas/")
-async def parse_cas(
+def parse_cas(
     file: UploadFile = File(...),
     password: str = Form(...),
     scheme_filter: str = Form(None),  # Optional: filter by scheme name
@@ -326,8 +326,8 @@ async def parse_cas(
     
     try:
         # Read file bytes
-        file_bytes = await file.read()
-        
+        file_bytes = file.file.read()
+
         # Parse CAS
         cas_data = cas_service.parse_cas_pdf(file_bytes, password.strip())
         
@@ -361,7 +361,7 @@ async def parse_cas(
 
 
 @router.post("/parse-cas/transactions/")
-async def get_cas_transactions(
+def get_cas_transactions(
     file: UploadFile = File(...),
     password: str = Form(...),
     scheme_name: str = Form(None),
@@ -384,7 +384,7 @@ async def get_cas_transactions(
         raise HTTPException(422, "Either scheme_name or isin is required.")
     
     try:
-        file_bytes = await file.read()
+        file_bytes = file.file.read()
         cas_data = cas_service.parse_cas_pdf(file_bytes, password.strip())
         
         # Extract transactions with valuation data

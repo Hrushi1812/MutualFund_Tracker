@@ -6,7 +6,7 @@ from routes.auth import get_current_user
 router = APIRouter(tags=["Portfolio"])
 
 @router.post("/analyze-portfolio")
-async def analyze_portfolio(
+def analyze_portfolio(
     request: PortfolioAnalysisRequest,
     current_user: dict = Depends(get_current_user)
 ):
