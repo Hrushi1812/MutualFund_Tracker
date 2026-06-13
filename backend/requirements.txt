@@ -1,5 +1,6 @@
 anyio
 appdirs
+cachetools
 beautifulsoup4
 certifi
 charset-normalizer

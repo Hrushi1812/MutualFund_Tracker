@@ -1,6 +1,8 @@
 from datetime import datetime, date, timedelta
+import threading
 import time
 import requests
+from cachetools import TTLCache
 from services.holdings_service import holdings_service, session
 from services.fyers_service import fyers_service
 from utils.date_utils import (
@@ -17,6 +19,12 @@ from utils.xirr import calculate_sip_xirr
 from core.logging import get_logger
 
 logger = get_logger("NavService")
+
+# Full NAV history per scheme from mfapi.in (the /mf/{code} endpoint returns
+# the entire history, often thousands of rows). Official NAVs publish once a
+# day, so a 15-minute TTL is conservative. Failures are never cached.
+_NAV_HISTORY_CACHE = TTLCache(maxsize=256, ttl=900)
+_NAV_HISTORY_LOCK = threading.Lock()
 
 
 class NavService:
@@ -114,38 +122,56 @@ class NavService:
         return None
 
     @staticmethod
+    def _get_scheme_history(scheme_code):
+        """
+        Returns (nav_data, meta) for a scheme from mfapi.in, where nav_data is
+        the full NAV history list (newest first). Cached for 15 minutes so the
+        multiple lookups within a single P&L calculation (latest NAV, purchase
+        NAV, per-installment NAVs) hit the network only once per scheme.
+        Returns ([], None) on failure; failures are not cached so transient
+        errors retry on the next call.
+        """
+        key = str(scheme_code)
+        with _NAV_HISTORY_LOCK:
+            cached = _NAV_HISTORY_CACHE.get(key)
+        if cached is not None:
+            return cached
+        try:
+            url = f"https://api.mfapi.in/mf/{scheme_code}"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "SUCCESS":
+                    result = (data.get("data") or [], data.get("meta"))
+                    with _NAV_HISTORY_LOCK:
+                        _NAV_HISTORY_CACHE[key] = result
+                    return result
+        except Exception as e:
+            logger.error(f"Error fetching NAV history for {scheme_code}: {e}")
+        return ([], None)
+
+    @staticmethod
     def get_latest_nav(scheme_code, limit=1):
         """
         Returns a list of latest NAV entries (newest first).
         Each entry: {"date": "DD-MM-YYYY", "nav": float, "meta": ...}
         Always returns a list (empty if none).
         """
-        try:
-            url = f"https://api.mfapi.in/mf/{scheme_code}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "SUCCESS":
-                    nav_data = data.get("data") or []
-                    if nav_data:
-                        # nav_data is usually newest-first; slice defensively
-                        recent = nav_data[:limit]
-                        results = []
-                        for item in recent:
-                            try:
-                                results.append(
-                                    {
-                                        "date": item["date"],
-                                        "nav": float(item["nav"]),
-                                        "meta": data.get("meta"),
-                                    }
-                                )
-                            except Exception:
-                                continue
-                        return results
-        except Exception as e:
-            logger.error(f"Error fetching NAV for {scheme_code}: {e}")
-        return []
+        nav_data, meta = NavService._get_scheme_history(scheme_code)
+        results = []
+        # nav_data is usually newest-first; slice defensively
+        for item in nav_data[:limit]:
+            try:
+                results.append(
+                    {
+                        "date": item["date"],
+                        "nav": float(item["nav"]),
+                        "meta": meta,
+                    }
+                )
+            except Exception:
+                continue
+        return results
 
     @staticmethod
     def get_nav_at_date(scheme_code, target_date_str):
@@ -155,17 +181,11 @@ class NavService:
         Returns (nav_float, nav_date_str) or None.
         """
         try:
-            url = f"https://api.mfapi.in/mf/{scheme_code}"
-            response = requests.get(url, timeout=5)
-            if response.status_code != 200:
-                return None
-
-            data = response.json()
-            if data.get("status") != "SUCCESS":
+            nav_data, _ = NavService._get_scheme_history(scheme_code)
+            if not nav_data:
                 return None
 
             target_date = parse_date_from_str(target_date_str).date()
-            nav_data = data.get("data") or []
 
             # iterate through nav_data (assumed newest-first); find first entry <= target_date
             for entry in nav_data:
@@ -183,23 +203,17 @@ class NavService:
     def get_next_nav_after_date(scheme_code, target_date_str):
         """
         Finds the first official NAV on or after the target date.
-        This is used for SIP unit calculation - units are allocated based on 
+        This is used for SIP unit calculation - units are allocated based on
         the NAV of the investment date (or next business day if market was closed).
-        
+
         Returns (nav_float, nav_date_str) or None.
         """
         try:
-            url = f"https://api.mfapi.in/mf/{scheme_code}"
-            response = requests.get(url, timeout=5)
-            if response.status_code != 200:
-                return None
-
-            data = response.json()
-            if data.get("status") != "SUCCESS":
+            nav_data, _ = NavService._get_scheme_history(scheme_code)
+            if not nav_data:
                 return None
 
             target_date = parse_date_from_str(target_date_str).date()
-            nav_data = data.get("data") or []
 
             # nav_data is newest-first, so we need to find the earliest entry >= target_date
             # We'll collect all entries >= target_date, then take the oldest one (smallest date)
@@ -211,18 +225,18 @@ class NavService:
                         candidates.append((entry_date, float(entry["nav"]), entry["date"]))
                 except Exception:
                     continue
-            
+
             if candidates:
                 # Sort by date ascending and take the first (oldest/earliest)
                 candidates.sort(key=lambda x: x[0])
                 _, nav, nav_date_str = candidates[0]
                 return (nav, nav_date_str)
-            
+
             # If no NAV on or after target_date, fall back to latest available
             if nav_data:
                 latest = nav_data[0]
                 return (float(latest["nav"]), latest["date"])
-                
+
         except Exception as e:
             logger.error(f"Error fetching next NAV for {scheme_code} date {target_date_str}: {e}")
         return None
