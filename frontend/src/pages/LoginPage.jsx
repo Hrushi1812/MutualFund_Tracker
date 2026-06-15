@@ -6,8 +6,6 @@ import { AuthContext } from '../context/AuthContext';
 import ServerWakeUp from '../components/ui/ServerWakeUp';
 import api from '../api';
 
-const COLD_START_THRESHOLD_MS = 1000;
-
 const LoginPage = () => {
     const navigate = useNavigate();
     const { login } = useContext(AuthContext);
@@ -20,7 +18,6 @@ const LoginPage = () => {
     // Refs to coordinate between the login promise and the wake-up screen
     const loginResolvedRef = useRef(false);
     const credentialsRef = useRef({ username: '', password: '' });
-    const coldStartTimerRef = useRef(null);
     const wakeUpShownRef = useRef(false);
 
     // ── Phase 1: Pre-warm the backend as soon as the login page loads ──
@@ -29,14 +26,13 @@ const LoginPage = () => {
         api.get('/health').catch(() => { });
     }, []);
 
-    // Cleanup cold-start timer on unmount
-    useEffect(() => {
-        return () => {
-            if (coldStartTimerRef.current) {
-                clearTimeout(coldStartTimerRef.current);
-                coldStartTimerRef.current = null;
-            }
-        };
+    const isServerReachable = useCallback(async () => {
+        try {
+            await api.get('/health', { timeout: 1200 });
+            return true;
+        } catch {
+            return false;
+        }
     }, []);
 
     const handleLogin = async (e) => {
@@ -47,17 +43,17 @@ const LoginPage = () => {
         wakeUpShownRef.current = false;
         credentialsRef.current = { username: formData.username, password: formData.password };
 
-        // Start a timer: if login takes too long → show wake-up overlay
-        coldStartTimerRef.current = setTimeout(() => {
-            if (!loginResolvedRef.current) {
-                wakeUpShownRef.current = true;
-                setShowWakeUp(true);
-            }
-        }, COLD_START_THRESHOLD_MS);
+        // Only show wake-up UI if server is actually unreachable.
+        // This avoids showing animation for normal auth failures (wrong credentials).
+        const reachable = await isServerReachable();
+        if (!reachable) {
+            wakeUpShownRef.current = true;
+            setShowWakeUp(true);
+            return;
+        }
 
         try {
             const result = await login(formData.username, formData.password);
-            clearTimeout(coldStartTimerRef.current);
 
             // Server is unreachable (network error) — show wake-up overlay
             if (result.isNetworkError && !wakeUpShownRef.current) {
@@ -86,8 +82,6 @@ const LoginPage = () => {
                 }
             }
         } catch (err) {
-            clearTimeout(coldStartTimerRef.current);
-
             // Network error (connection refused / server unreachable) = server is down
             const isNetworkError = !err?.response;
 
